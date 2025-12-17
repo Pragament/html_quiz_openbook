@@ -1,16 +1,23 @@
 // Firebase Configuration
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAFpwi3k7Qth9MiqqRGKstY0Zkj_vrcdFY",
+    authDomain: "edutrack-admin.firebaseapp.com",
+    projectId: "edutrack-admin",
+    storageBucket: "edutrack-admin.firebasestorage.app",
+    messagingSenderId: "193864081571",
+    appId: "1:193864081571:web:7501afde01291f81e61f16"
 };
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
+// Application State
+let appState = {
+    currentView: 'paper-selection', // 'paper-selection' or 'quiz'
+    selectedPaperId: null,
+    allPapers: [] // Store fetched papers for local filtering
+};
 
 // Quiz State
 let quizState = {
@@ -22,11 +29,20 @@ let quizState = {
     questions: [],
     pdfDocument: null,
     currentPdfPage: 1,
-    pdfScale: 1.5
+    pdfScale: 1.2, // Adjusted for split screen
+    timerInterval: null,
+    renderTask: null // Track PDF render task
 };
 
 // DOM Elements
 const elements = {
+    // Views
+    paperSelectionView: document.getElementById('paper-selection'),
+    quizInterfaceView: document.getElementById('quiz-interface'),
+    papersList: document.getElementById('papers-list'),
+    paperSearch: document.getElementById('paper-search'),
+
+    // Quiz Elements
     questionsContainer: document.getElementById('questions-container'),
     questionNav: document.getElementById('question-nav'),
     prevBtn: document.getElementById('prev-btn'),
@@ -35,359 +51,490 @@ const elements = {
     progressBar: document.getElementById('progress-bar'),
     progressText: document.getElementById('progress-text'),
     timer: document.getElementById('timer'),
+
+    // PDF Elements
     pdfCanvas: document.getElementById('pdf-canvas'),
     pageNum: document.getElementById('page-num'),
     pageCount: document.getElementById('page-count'),
     prevPage: document.getElementById('prev-page'),
     nextPage: document.getElementById('next-page'),
-    pdfSearch: document.getElementById('pdf-search')
+    pdfSearch: document.getElementById('pdf-search'),
+
+    // Navigation
+    backToListBtn: document.getElementById('back-to-list'),
+    mobileBackBtn: document.getElementById('mobile-back')
 };
 
-// Initialize Quiz
-async function initQuiz(questionPaperID = "692fee1c3bd2b58549614e6d") {
+// --- Initialization ---
+
+async function initApp() {
+    await fetchPapers();
+}
+
+async function fetchPapers() {
+    // console.log('Fetching papers...');
+    elements.papersList.innerHTML = '<div class="col-12 text-center"><div class="spinner-border text-primary"></div><p class="mt-2">Connecting to Firebase...</p></div>';
+
     try {
-        // Load questions from Firestore
-        const doc = await db.collection('questionpapers').doc(questionPaperID).get();
-        if (!doc.exists) {
-            throw new Error('Question paper not found');
+        const [snapshotLower, snapshotUpper] = await Promise.all([
+            db.collection('questionpapers').get().catch(e => { console.warn("Access to 'questionpapers' failed", e); return { empty: true, docs: [] }; }),
+            db.collection('QuestionPapers').get().catch(e => { console.warn("Access to 'QuestionPapers' failed", e); return { empty: true, docs: [] }; })
+        ]);
+
+        const uniquePapersMap = new Map();
+
+        const processDoc = (doc, collectionName) => {
+            if (uniquePapersMap.has(doc.id)) return;
+
+            const data = doc.data();
+            // Normalize data for display and search
+            const title = data.Title || data.title || data.Name || data.name ||
+                data.Subject || data.subject || data.testName ||
+                data.heading || data.Heading ||
+                `Paper ${doc.id.substring(0, 6)}`;
+
+            const classInfo = data.Class || data.class || data.Grade || data.grade || data.standard;
+            const subtitle = classInfo ? `Class: ${classInfo}` : (data.Description || data.description || 'Open Book Assessment');
+
+            const questions = data.questions || data.Questions || [];
+            const questionCount = questions.length;
+
+            uniquePapersMap.set(doc.id, {
+                id: doc.id,
+                collectionName,
+                title,
+                subtitle,
+                questionCount,
+                rawData: data
+            });
+        };
+
+        snapshotLower.docs.forEach(d => processDoc(d, 'questionpapers'));
+        snapshotUpper.docs.forEach(d => processDoc(d, 'QuestionPapers'));
+
+        appState.allPapers = Array.from(uniquePapersMap.values());
+
+        if (appState.allPapers.length === 0) {
+            elements.papersList.innerHTML = `
+                <div class="col-12 text-center text-muted">
+                    <p>No question papers found.</p>
+                </div>`;
+            return;
         }
 
+        renderPapers(appState.allPapers);
+
+    } catch (error) {
+        console.error('Error fetching papers:', error);
+        elements.papersList.innerHTML = `
+            <div class="col-12 text-center text-danger">
+                <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+                <h5 class="my-2">Failed to load papers</h5>
+                <p class="small text-muted">${error.message}</p>
+            </div>`;
+    }
+}
+
+function renderPapers(papers) {
+    elements.papersList.innerHTML = '';
+
+    if (papers.length === 0) {
+        elements.papersList.innerHTML = '<div class="col-12 text-center text-muted">No matching papers found.</div>';
+        return;
+    }
+
+    papers.forEach((paper, index) => {
+        const cardCol = document.createElement('div');
+        cardCol.className = 'col-lg-4 col-md-6 animate-fade-in';
+        cardCol.innerHTML = `
+            <div class="card h-100 paper-card border-0 shadow-sm" onclick="startQuiz('${paper.id}', '${paper.collectionName}')">
+                <div class="card-body p-4 text-center">
+                    <div class="paper-icon mb-3">
+                        <i class="bi bi-file-text-fill"></i>
+                    </div>
+                    <h5 class="card-title fw-bold mb-2">${paper.title}</h5>
+                    <p class="card-text text-muted small mb-3">${paper.subtitle}</p>
+                    <span class="badge bg-light text-primary border border-primary rounded-pill px-3">
+                        ${paper.questionCount} Questions
+                    </span>
+                    <div class="mt-2 text-muted" style="font-size: 0.75rem">
+                        ID: ${paper.id.substring(0, 8)}...
+                    </div>
+                </div>
+            </div>
+        `;
+        elements.papersList.appendChild(cardCol);
+    });
+}
+
+// Search Handler
+if (elements.paperSearch) {
+    elements.paperSearch.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = appState.allPapers.filter(paper =>
+            paper.title.toLowerCase().includes(term) ||
+            paper.subtitle.toLowerCase().includes(term) ||
+            paper.id.toLowerCase().includes(term)
+        );
+        renderPapers(filtered);
+    });
+}
+
+// --- Navigation Logic ---
+
+function showQuizView() {
+    elements.paperSelectionView.classList.add('d-none');
+    elements.quizInterfaceView.classList.remove('d-none');
+    appState.currentView = 'quiz';
+}
+
+function showPaperSelectionView() {
+    elements.quizInterfaceView.classList.add('d-none');
+    elements.paperSelectionView.classList.remove('d-none');
+    appState.currentView = 'paper-selection';
+
+    // Reset Quiz state
+    if (quizState.timerInterval) clearInterval(quizState.timerInterval);
+
+    // Reset PDF
+    if (quizState.renderTask) {
+        try { quizState.renderTask.cancel(); } catch (e) { }
+        quizState.renderTask = null;
+    }
+    quizState.pdfDocument = null;
+
+    quizState.answers = {};
+    quizState.currentQuestion = 0;
+    quizState.timeElapsed = 0;
+    elements.timer.textContent = "00:00";
+}
+
+// --- Quiz Logic ---
+
+async function startQuiz(paperId, collectionName = 'questionpapers') {
+    appState.selectedPaperId = paperId;
+    showQuizView();
+
+    // Show loading state
+    elements.questionsContainer.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
+
+    try {
+        const doc = await db.collection(collectionName).doc(paperId).get();
+        if (!doc.exists) throw new Error('Paper not found');
+
         const data = doc.data();
+        // console.log('Selected Paper Data:', data);
+
+        // Confirmed field name from logs: 'questions' (lowercase)
         quizState.questions = data.questions || [];
+
+        if (quizState.questions.length === 0) {
+            // Fallback just in case
+            quizState.questions = data.Questions || [];
+        }
+
+        if (quizState.questions.length === 0) {
+            alert('This paper has no questions or the data format is different than expected.');
+        }
+
         quizState.totalQuestions = quizState.questions.length;
         quizState.startTime = Date.now();
-
-        // Initialize answers object
         quizState.answers = {};
-        quizState.questions.forEach((_, index) => {
-            quizState.answers[index] = null;
-        });
 
-        // Render quiz
+        // Initialize null answers
+        quizState.questions.forEach((_, index) => quizState.answers[index] = null);
+
         renderQuestionNavigation();
-        renderCurrentQuestion();
+        navigateToQuestion(0);
         updateProgress();
         startTimer();
 
-        // Load PDF (example PDF - replace with your textbook URL)
-        loadPdf('https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf');
+        // Load PDF 
+        const pdfUrl = data.pdfUrl || data.pdf || 'textbook.pdf';
+        loadPdf(pdfUrl);
 
     } catch (error) {
-        console.error('Error initializing quiz:', error);
-        alert('Failed to load quiz. Please try again.');
+        console.error('Error loading quiz:', error);
+        alert('Error loading quiz: ' + error.message);
+        showPaperSelectionView();
     }
 }
 
-// Render Question Navigation
 function renderQuestionNavigation() {
     elements.questionNav.innerHTML = '';
-    
     quizState.questions.forEach((_, index) => {
-        const questionNumber = document.createElement('div');
-        questionNumber.className = 'question-number';
-        if (index === quizState.currentQuestion) {
-            questionNumber.classList.add('active', 'current');
-        }
-        if (quizState.answers[index] !== null) {
-            questionNumber.classList.add('answered');
-        }
-        
-        questionNumber.textContent = index + 1;
-        questionNumber.addEventListener('click', () => navigateToQuestion(index));
-        
-        elements.questionNav.appendChild(questionNumber);
+        const btn = document.createElement('div');
+        btn.className = 'question-number';
+        btn.textContent = index + 1;
+        if (index === quizState.currentQuestion) btn.classList.add('active', 'current');
+        btn.addEventListener('click', () => navigateToQuestion(index));
+        elements.questionNav.appendChild(btn);
     });
 }
 
-// Render Current Question
-function renderCurrentQuestion() {
-    elements.questionsContainer.innerHTML = '';
-    
-    const question = quizState.questions[quizState.currentQuestion];
-    if (!question) return;
-
-    const questionCard = document.createElement('div');
-    questionCard.className = 'question-card active';
-    
-    // Question text
-    const questionText = document.createElement('h5');
-    questionText.className = 'mb-4';
-    questionText.textContent = `Q${quizState.currentQuestion + 1}: ${question.Question || ''}`;
-    questionCard.appendChild(questionText);
-
-    // Chapter/Class info
-    const metaInfo = document.createElement('div');
-    metaInfo.className = 'mb-3 text-muted small';
-    metaInfo.innerHTML = `
-        <span class="badge bg-secondary me-2">${question.Chapter || 'No Chapter'}</span>
-        <span class="badge bg-info me-2">${question.Class || 'No Class'}</span>
-        <span class="badge bg-warning">${question.Topic || 'No Topic'}</span>
-    `;
-    questionCard.appendChild(metaInfo);
-
-    // Options
-    const optionsContainer = document.createElement('div');
-    optionsContainer.className = 'mb-3';
-    
-    for (let i = 1; i <= 4; i++) {
-        const optionText = question[`Option ${i}`];
-        if (!optionText) continue;
-
-        const label = document.createElement('label');
-        label.className = 'option-label';
-        
-        const input = document.createElement('input');
-        input.type = 'radio';
-        input.name = 'question-' + quizState.currentQuestion;
-        input.value = i;
-        input.style.display = 'none';
-        
-        if (quizState.answers[quizState.currentQuestion] === i) {
-            label.classList.add('selected');
-            input.checked = true;
-        }
-        
-        input.addEventListener('change', () => selectOption(i));
-        
-        const optionContent = document.createElement('div');
-        optionContent.innerHTML = `<strong>${String.fromCharCode(64 + i)}.</strong> ${optionText}`;
-        
-        label.appendChild(input);
-        label.appendChild(optionContent);
-        optionsContainer.appendChild(label);
-    }
-    
-    questionCard.appendChild(optionsContainer);
-    elements.questionsContainer.appendChild(questionCard);
-}
-
-// Select Option
-function selectOption(optionIndex) {
-    quizState.answers[quizState.currentQuestion] = optionIndex;
-    
-    // Update UI
-    const labels = document.querySelectorAll('.option-label');
-    labels.forEach(label => {
-        label.classList.remove('selected');
-        const input = label.querySelector('input');
-        if (input && parseInt(input.value) === optionIndex) {
-            label.classList.add('selected');
-        }
-    });
-    
-    updateNavigation();
-    updateProgress();
-}
-
-// Navigation Functions
 function navigateToQuestion(index) {
     if (index < 0 || index >= quizState.totalQuestions) return;
-    
+
     quizState.currentQuestion = index;
-    renderCurrentQuestion();
-    renderQuestionNavigation();
-    updateNavigationButtons();
+
+    // Update Nav UI
+    document.querySelectorAll('.question-number').forEach((btn, idx) => {
+        btn.classList.remove('current', 'active');
+        if (idx === index) btn.classList.add('current', 'active');
+        if (quizState.answers[idx] !== null) btn.classList.add('answered');
+    });
+
+    // Render Question
+    const question = quizState.questions[index];
+    renderQuestionCard(question, index);
+
+    // Update Buttons
+    elements.prevBtn.disabled = index === 0;
+    elements.nextBtn.disabled = index === quizState.totalQuestions - 1;
 }
 
-function updateNavigationButtons() {
-    elements.prevBtn.disabled = quizState.currentQuestion === 0;
-    elements.nextBtn.disabled = quizState.currentQuestion === quizState.totalQuestions - 1;
+function renderQuestionCard(question, index) {
+    elements.questionsContainer.innerHTML = '';
+
+    const card = document.createElement('div');
+    card.className = 'question-card active';
+
+    const title = document.createElement('div');
+    title.className = 'd-flex justify-content-between align-items-start mb-3';
+    title.innerHTML = `<h5 class="fw-bold text-dark">Question ${index + 1}</h5>`;
+
+    // Confirmed field from logs: 'Question' (Capitalized)
+    const qText = question.Question || question.question || 'No question text available.';
+
+    const text = document.createElement('div');
+    text.className = 'mb-4 fs-5';
+    text.textContent = qText;
+
+    const optionsDiv = document.createElement('div');
+
+    for (let i = 1; i <= 4; i++) {
+        // Confirmed field from logs: 'Option 1', etc.
+        const optionKey = `Option ${i}`;
+        const optionText = question[optionKey] || question[`option ${i}`] || question[`Option${i}`];
+        if (!optionText) continue;
+
+        const isSelected = quizState.answers[index] === i;
+
+        const label = document.createElement('div');
+        label.className = `option-label ${isSelected ? 'selected' : ''}`;
+        label.onclick = () => selectOption(index, i);
+
+        label.innerHTML = `
+            <div class="option-marker">${String.fromCharCode(64 + i)}</div>
+            <div class="flex-grow-1">${optionText}</div>
+        `;
+
+        optionsDiv.appendChild(label);
+    }
+
+    card.appendChild(title);
+    card.appendChild(text);
+    card.appendChild(optionsDiv);
+    elements.questionsContainer.appendChild(card);
 }
 
-function updateNavigation() {
-    renderQuestionNavigation();
-    updateNavigationButtons();
+function selectOption(qIndex, optionIndex) {
+    quizState.answers[qIndex] = optionIndex;
+    updateProgress();
+    // Re-render to show selection
+    navigateToQuestion(qIndex);
 }
 
-// Progress Tracking
 function updateProgress() {
-    const answered = Object.values(quizState.answers).filter(answer => answer !== null).length;
-    const progress = (answered / quizState.totalQuestions) * 100;
-    
-    elements.progressBar.style.width = `${progress}%`;
-    elements.progressText.textContent = `${answered}/${quizState.totalQuestions}`;
+    const answeredCount = Object.values(quizState.answers).filter(a => a !== null).length;
+    const percent = quizState.totalQuestions > 0 ? (answeredCount / quizState.totalQuestions) * 100 : 0;
+
+    elements.progressBar.style.width = `${percent}%`;
+    elements.progressText.textContent = `${answeredCount}/${quizState.totalQuestions}`;
+
+    // Update nav dots
+    document.querySelectorAll('.question-number').forEach((btn, idx) => {
+        if (quizState.answers[idx] !== null) btn.classList.add('answered');
+    });
 }
 
-// Timer
 function startTimer() {
-    setInterval(() => {
+    if (quizState.timerInterval) clearInterval(quizState.timerInterval);
+
+    quizState.timerInterval = setInterval(() => {
         quizState.timeElapsed = Math.floor((Date.now() - quizState.startTime) / 1000);
-        const minutes = Math.floor(quizState.timeElapsed / 60);
-        const seconds = quizState.timeElapsed % 60;
-        elements.timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        const m = Math.floor(quizState.timeElapsed / 60);
+        const s = quizState.timeElapsed % 60;
+        elements.timer.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }, 1000);
 }
 
-// PDF.js Integration
+// --- PDF Logic ---
+
 async function loadPdf(url) {
+    // Reset state
+    if (quizState.renderTask) {
+        try { await quizState.renderTask.cancel(); } catch (e) { }
+        quizState.renderTask = null;
+    }
+
     try {
         const loadingTask = pdfjsLib.getDocument(url);
         quizState.pdfDocument = await loadingTask.promise;
-        
-        // Display total page count
+
         elements.pageCount.textContent = quizState.pdfDocument.numPages;
-        
-        // Render first page
-        await renderPdfPage(1);
+        renderPdfPage(1);
     } catch (error) {
         console.error('Error loading PDF:', error);
+
+        const ctx = elements.pdfCanvas.getContext('2d');
+        elements.pdfCanvas.height = 150;
+        ctx.font = '16px Arial';
+        ctx.fillStyle = '#dc3545';
+        ctx.fillText('Could not load PDF.', 10, 50);
+        ctx.font = '12px Arial';
+        ctx.fillStyle = '#6c757d';
+        ctx.fillText(error.message, 10, 80);
+
+        if (error.message && error.message.includes('404')) {
+            ctx.fillText('Ensure "textbook.pdf" is in the root folder.', 10, 100);
+        }
     }
 }
 
-async function renderPdfPage(pageNum) {
-    if (!quizState.pdfDocument || pageNum < 1 || pageNum > quizState.pdfDocument.numPages) return;
-    
-    quizState.currentPdfPage = pageNum;
-    elements.pageNum.textContent = pageNum;
-    
-    const page = await quizState.pdfDocument.getPage(pageNum);
-    const viewport = page.getViewport({ scale: quizState.pdfScale });
-    
-    // Set canvas dimensions
+async function renderPdfPage(num) {
+    if (!quizState.pdfDocument) return;
+    if (num < 1 || num > quizState.pdfDocument.numPages) return;
+
+    // Cancel any pending render
+    if (quizState.renderTask) {
+        try {
+            await quizState.renderTask.cancel();
+        } catch (error) {
+            // Ignore cancel error
+        }
+    }
+
+    quizState.currentPdfPage = num;
+    elements.pageNum.textContent = num;
+
+    const page = await quizState.pdfDocument.getPage(num);
+
+    // Calculate scale to fit width of container
+    const containerWidth = elements.pdfCanvas.parentElement.clientWidth;
+    const viewportUnscaled = page.getViewport({ scale: 1 });
+    const scale = (containerWidth - 40) / viewportUnscaled.width; // -40 for padding
+
+    const viewport = page.getViewport({ scale: scale });
+
     elements.pdfCanvas.height = viewport.height;
     elements.pdfCanvas.width = viewport.width;
-    
-    const context = elements.pdfCanvas.getContext('2d');
+
     const renderContext = {
-        canvasContext: context,
+        canvasContext: elements.pdfCanvas.getContext('2d'),
         viewport: viewport
     };
-    
-    await page.render(renderContext).promise;
-}
 
-// PDF Search Functionality
-function setupPdfSearch() {
-    elements.pdfSearch.addEventListener('keypress', async (e) => {
-        if (e.key === 'Enter') {
-            const searchTerm = elements.pdfSearch.value.trim();
-            if (!searchTerm) return;
-            
-            // This is a simplified search - for full text search you'd need PDF.js text layer
-            alert(`Searching for "${searchTerm}" in PDF. Note: Full text search requires additional setup with PDF.js text layer.`);
+    // Keep track of the render task
+    quizState.renderTask = page.render(renderContext);
+
+    try {
+        await quizState.renderTask.promise;
+    } catch (error) {
+        if (error.name !== 'RenderingCancelledException') {
+            console.error('Render error:', error);
         }
-    });
+    }
 }
 
-// Submit Quiz
-async function submitQuiz() {
-    // Calculate score
+
+// --- Search & Submit ---
+// Simple submit handler similar to before
+function submitQuiz() {
     let score = 0;
     const results = [];
-    
-    quizState.questions.forEach((question, index) => {
-        const userAnswer = quizState.answers[index];
-        const correctAnswer = parseInt(question['Correct Option']);
-        const isCorrect = userAnswer === correctAnswer;
-        
-        if (isCorrect) score++;
-        
+
+    quizState.questions.forEach((q, idx) => {
+        const ans = quizState.answers[idx];
+
+        // Confirmed field from logs: 'Correct Option'
+        // Some records have it as empty string? Handle safely
+        const correctVal = q['Correct Option'] || q['correct option'];
+        let correct = null;
+
+        if (correctVal) {
+            correct = parseInt(correctVal); // Parse to int just in case it's a string "1"
+        }
+
+        const isCorrect = (ans === correct);
+
+        // If there is no correct answer specified, technically you can't be "correct", 
+        // or effectively everything is wrong unless handled otherwise.
+        // For now, only score increments if we strictly match a logical correct answer.
+        if (correct !== null && !isNaN(correct) && isCorrect) {
+            score++;
+        }
+
         results.push({
-            question: question.Question,
-            userAnswer: question[`Option ${userAnswer}`] || 'Not answered',
-            correctAnswer: question[`Option ${correctAnswer}`] || 'No correct answer specified',
+            q: q.Question || 'Question',
+            userAns: q[`Option ${ans}`] || 'Skipped',
+            correctAns: q[`Option ${correct}`] || 'Not specified',
             isCorrect
         });
     });
-    
-    // Display results
-    const modal = new bootstrap.Modal(document.getElementById('resultsModal'));
-    const resultsContent = document.getElementById('results-content');
-    
-    const percentage = ((score / quizState.totalQuestions) * 100).toFixed(1);
-    
-    resultsContent.innerHTML = `
+
+    const percent = quizState.totalQuestions > 0 ? ((score / quizState.totalQuestions) * 100).toFixed(1) : 0;
+    const modalBody = document.getElementById('results-content');
+    modalBody.innerHTML = `
         <div class="text-center mb-4">
-            <h3 class="text-primary">Quiz Completed!</h3>
-            <div class="display-4 fw-bold ${percentage >= 70 ? 'text-success' : percentage >= 50 ? 'text-warning' : 'text-danger'}">
-                ${score}/${quizState.totalQuestions}
-            </div>
-            <div class="fs-5">(${percentage}%)</div>
-            <div class="mt-3">Time taken: ${formatTime(quizState.timeElapsed)}</div>
+            <h2 class="${percent >= 70 ? 'text-success' : 'text-primary'} fw-bold">${score} / ${quizState.totalQuestions}</h2>
+            <p class="text-muted">You scored ${percent}%</p>
         </div>
-        
-        <div class="mt-4">
-            <h5>Detailed Results:</h5>
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Question</th>
-                            <th>Your Answer</th>
-                            <th>Correct Answer</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${results.map((result, idx) => `
-                            <tr>
-                                <td>Q${idx + 1}: ${result.question.substring(0, 50)}...</td>
-                                <td>${result.userAnswer.substring(0, 30)}...</td>
-                                <td>${result.correctAnswer.substring(0, 30)}...</td>
-                                <td>
-                                    <span class="badge ${result.isCorrect ? 'bg-success' : 'bg-danger'}">
-                                        ${result.isCorrect ? 'Correct' : 'Incorrect'}
-                                    </span>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
+        <div class="list-group">
+            ${results.map((r, i) => `
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">Q${i + 1}: ${r.q}</h6>
+                        <small class="${r.isCorrect ? 'text-success' : 'text-danger'} fw-bold">${r.isCorrect ? 'Correct' : 'Wrong'}</small>
+                    </div>
+                    <small class="text-muted">Your answer: ${r.userAns}</small><br>
+                    ${!r.isCorrect ? `<small class="text-success">Correct answer: ${r.correctAns}</small>` : ''}
+                </div>
+            `).join('')}
         </div>
     `;
-    
+
+    const modal = new bootstrap.Modal(document.getElementById('resultsModal'));
     modal.show();
 }
 
-function formatTime(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds}s`;
-}
+// --- Event Listeners ---
 
-// Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize quiz
-    initQuiz();
-    
-    // Navigation buttons
-    elements.prevBtn.addEventListener('click', () => navigateToQuestion(quizState.currentQuestion - 1));
-    elements.nextBtn.addEventListener('click', () => navigateToQuestion(quizState.currentQuestion + 1));
-    elements.submitBtn.addEventListener('click', submitQuiz);
-    
-    // PDF navigation
-    elements.prevPage.addEventListener('click', () => renderPdfPage(quizState.currentPdfPage - 1));
-    elements.nextPage.addEventListener('click', () => renderPdfPage(quizState.currentPdfPage + 1));
-    
-    // Setup PDF search
-    setupPdfSearch();
-    
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        switch(e.key) {
-            case 'ArrowLeft':
-                if (!e.ctrlKey) {
-                    navigateToQuestion(quizState.currentQuestion - 1);
-                } else {
-                    renderPdfPage(quizState.currentPdfPage - 1);
-                }
-                break;
-            case 'ArrowRight':
-                if (!e.ctrlKey) {
-                    navigateToQuestion(quizState.currentQuestion + 1);
-                } else {
-                    renderPdfPage(quizState.currentPdfPage + 1);
-                }
-                break;
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-                if (!e.ctrlKey) {
-                    selectOption(parseInt(e.key));
-                }
-                break;
+    initApp();
+
+    // Nav
+    elements.prevBtn.onclick = () => navigateToQuestion(quizState.currentQuestion - 1);
+    elements.nextBtn.onclick = () => navigateToQuestion(quizState.currentQuestion + 1);
+    elements.submitBtn.onclick = submitQuiz;
+
+    elements.backToListBtn.onclick = showPaperSelectionView;
+    elements.mobileBackBtn.onclick = showPaperSelectionView;
+
+    // PDF
+    elements.prevPage.onclick = () => renderPdfPage(quizState.currentPdfPage - 1);
+    elements.nextPage.onclick = () => renderPdfPage(quizState.currentPdfPage + 1);
+
+    elements.pdfSearch.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            alert('Search functionality requires advanced PDF text layer integration.');
+        }
+    });
+
+    // Window resize handling for PDF
+    window.addEventListener('resize', () => {
+        if (appState.currentView === 'quiz') {
+            renderPdfPage(quizState.currentPdfPage);
         }
     });
 });
