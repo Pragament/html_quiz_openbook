@@ -38,10 +38,13 @@ const elements = {
     homepage: document.getElementById('homepage'),
     quizInterface: document.getElementById('quiz-interface'),
     reportsView: document.getElementById('reports-view'),
+    myQuizzesView: document.getElementById('my-quizzes-view'),
     quizzesList: document.getElementById('quizzes-list'),
     createQuizBtn: document.getElementById('create-quiz-btn'),
+    myQuizzesBtn: document.getElementById('my-quizzes-btn'),
     viewReportsBtn: document.getElementById('view-reports-btn'),
     backToHome: document.getElementById('back-to-home'),
+    backToHomeFromQuizzes: document.getElementById('back-to-home-from-quizzes'),
     questionsContainer: document.getElementById('questions-container'),
     questionNav: document.getElementById('question-nav'),
     progressBar: document.getElementById('progress-bar'),
@@ -66,7 +69,128 @@ document.addEventListener('DOMContentLoaded', () => {
     loadQuizzes();
     loadQuestionPapers();
     preventNavigation();
+    checkUrlParameters();
 });
+
+// Initialize Event Listeners
+function initEventListeners() {
+    // Quiz search functionality
+    const quizSearchInput = document.getElementById('quiz-search');
+    if (quizSearchInput) {
+        quizSearchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = state.quizzes.filter(q => 
+                q.title.toLowerCase().includes(term)
+            );
+            renderQuizzes(filtered);
+        });
+    }
+}
+
+// Navigation Prevention
+function preventNavigation() {
+    window.addEventListener('beforeunload', (e) => {
+        if (state.quizInProgress) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+}
+
+// View Management
+function showView(view) {
+    elements.homepage.classList.add('d-none');
+    elements.quizInterface.classList.add('d-none');
+    elements.reportsView.classList.add('d-none');
+    elements.myQuizzesView.classList.add('d-none');
+    
+    if (view === 'homepage') {
+        elements.homepage.classList.remove('d-none');
+    } else if (view === 'quiz') {
+        elements.quizInterface.classList.remove('d-none');
+    } else if (view === 'reports') {
+        elements.reportsView.classList.remove('d-none');
+    } else if (view === 'my-quizzes') {
+        elements.myQuizzesView.classList.remove('d-none');
+    }
+}
+
+// PDF Functions
+async function loadPdf(url) {
+    try {
+        const pdf = await pdfjsLib.getDocument(url).promise;
+        state.pdfDocument = pdf;
+        elements.pageCount.textContent = pdf.numPages;
+        await renderPdfPage(1);
+    } catch (error) {
+        alert('Failed to load PDF: ' + error.message);
+    }
+}
+
+async function renderPdfPage(num) {
+    if (!state.pdfDocument) return;
+    
+    try {
+        const page = await state.pdfDocument.getPage(num);
+        const viewport = page.getViewport({ scale: 1.5 });
+        elements.pdfCanvas.width = viewport.width;
+        elements.pdfCanvas.height = viewport.height;
+        await page.render({ 
+            canvasContext: elements.pdfCanvas.getContext('2d'), 
+            viewport 
+        }).promise;
+        state.currentPdfPage = num;
+        elements.pageNum.textContent = num;
+    } catch (error) {
+        // Silent error handling
+    }
+}
+
+elements.prevPage.addEventListener('click', () => {
+    if (state.currentPdfPage > 1) {
+        renderPdfPage(state.currentPdfPage - 1);
+    }
+});
+
+elements.nextPage.addEventListener('click', () => {
+    if (state.pdfDocument && state.currentPdfPage < state.pdfDocument.numPages) {
+        renderPdfPage(state.currentPdfPage + 1);
+    }
+});
+
+// Utility Functions
+function shuffleArray(array) {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+// Timer Function
+function startTimer(seconds) {
+    let remaining = seconds;
+    
+    const updateTimer = () => {
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        elements.timerDisplay.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+    };
+    
+    updateTimer(); // Initial display
+    
+    state.timerInterval = setInterval(() => {
+        remaining--;
+        updateTimer();
+        
+        if (remaining <= 0) {
+            clearInterval(state.timerInterval);
+            alert('Time is up!');
+            submitQuiz();
+        }
+    }, 1000);
+}
 
 // Authentication
 function initAuth() {
@@ -77,10 +201,12 @@ function initAuth() {
             elements.userInfo.classList.remove('d-none');
             elements.userName.textContent = user.displayName || user.email;
             elements.createQuizBtn.classList.remove('d-none');
+            elements.myQuizzesBtn.classList.remove('d-none');
         } else {
             elements.loginBtn.classList.remove('d-none');
             elements.userInfo.classList.add('d-none');
             elements.createQuizBtn.classList.add('d-none');
+            elements.myQuizzesBtn.classList.add('d-none');
         }
     });
 }
@@ -102,11 +228,20 @@ elements.logoutBtn.addEventListener('click', () => {
 async function loadQuizzes() {
     elements.quizzesList.innerHTML = '<div class="col-12 text-center"><div class="spinner-border"></div></div>';
     try {
-        const snapshot = await db.collection('quizzes').get();
+        const snapshot = await db.collection('quizzes').where('isPrivate', '==', false).get();
         state.quizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderQuizzes(state.quizzes);
     } catch (error) {
-        elements.quizzesList.innerHTML = '<div class="col-12 text-center text-danger">Failed to load quizzes</div>';
+        // Fallback: load all quizzes if query fails (for backward compatibility)
+        try {
+            const snapshot = await db.collection('quizzes').get();
+            state.quizzes = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(q => !q.isPrivate);
+            renderQuizzes(state.quizzes);
+        } catch (err) {
+            elements.quizzesList.innerHTML = '<div class="col-12 text-center text-danger">Failed to load quizzes</div>';
+        }
     }
 }
 
@@ -149,6 +284,7 @@ async function loadQuestionPapers() {
             db.collection('questionpapers').get().catch(() => ({ docs: [] })),
             db.collection('QuestionPapers').get().catch(() => ({ docs: [] }))
         ]);
+        
         const papers = new Map();
         
         [...lower.docs, ...upper.docs].forEach(doc => {
@@ -169,9 +305,8 @@ async function loadQuestionPapers() {
         });
         
         state.questionPapers = Array.from(papers.values());
-        console.log(`Loaded ${state.questionPapers.length} question papers`);
     } catch (error) {
-        console.error('Failed to load question papers:', error);
+        // Silent error handling
     }
 }
 
@@ -201,9 +336,28 @@ function updateRoundsConfig() {
         
         // Round 1 can be open book, Round 2 is always closed book
         const openBookOption = i === 1 ? `
-            <div class="form-check">
+            <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" id="openbook-${i}" checked>
-                <label class="form-check-label" for="openbook-${i}">Open Book (Show PDF Reference)</label>
+                <label class="form-check-label" for="openbook-${i}">Open Book (Show Reference Material)</label>
+            </div>
+            <div id="reference-config-${i}" class="border p-2 rounded bg-light">
+                <div class="mb-2">
+                    <label class="form-label small">Reference Material Type</label>
+                    <select class="form-select form-select-sm" id="ref-type-${i}">
+                        <option value="pdf-url">PDF URL</option>
+                        <option value="webpage">Web Page (iframe)</option>
+                    </select>
+                </div>
+                <div class="mb-2" id="pdf-url-${i}">
+                    <label class="form-label small">PDF URL</label>
+                    <input type="text" class="form-control form-control-sm" id="pdf-url-input-${i}" value="textbook.pdf" placeholder="https://example.com/document.pdf or textbook.pdf">
+                    <small class="text-muted">Enter PDF filename or full URL</small>
+                </div>
+                <div class="mb-2 d-none" id="webpage-url-${i}">
+                    <label class="form-label small">Web Page URL</label>
+                    <input type="text" class="form-control form-control-sm" id="webpage-url-input-${i}" placeholder="https://example.com">
+                    <small class="text-muted">Enter the URL of the web page to display</small>
+                </div>
             </div>
         ` : `
             <div class="alert alert-info mb-0">
@@ -225,60 +379,31 @@ function updateRoundsConfig() {
             </div>
         `;
     }
-}
-
-document.getElementById('save-quiz-btn').addEventListener('click', async () => {
-    if (!state.currentUser) {
-        alert('Please login to create quizzes');
-        return;
-    }
     
-    const title = document.getElementById('quiz-title').value;
-    if (!title.trim()) {
-        alert('Please enter a quiz title');
-        return;
-    }
-    
-    const numRounds = parseInt(document.getElementById('num-rounds').value);
-    const numQuestions = parseInt(document.getElementById('num-questions').value);
-    const randomQuestions = document.getElementById('random-questions').checked;
-    const timeLimitEnabled = document.getElementById('time-limit-enabled').checked;
-    const timeLimit = parseInt(document.getElementById('time-limit').value);
-
-    const rounds = [];
-    for (let i = 1; i <= numRounds; i++) {
-        const papers = Array.from(document.querySelector(`[data-round="${i}"]`).selectedOptions).map(o => o.value);
-        if (papers.length === 0) {
-            alert(`Please select at least one question paper for Round ${i}`);
-            return;
+    // Add event listeners for reference type toggle after DOM is updated
+    setTimeout(() => {
+        for (let i = 1; i <= numRounds; i++) {
+            const refTypeSelect = document.getElementById(`ref-type-${i}`);
+            if (refTypeSelect) {
+                refTypeSelect.addEventListener('change', (e) => {
+                    const pdfUrlDiv = document.getElementById(`pdf-url-${i}`);
+                    const webpageDiv = document.getElementById(`webpage-url-${i}`);
+                    
+                    // Hide all
+                    pdfUrlDiv.classList.add('d-none');
+                    webpageDiv.classList.add('d-none');
+                    
+                    // Show selected
+                    if (e.target.value === 'pdf-url') {
+                        pdfUrlDiv.classList.remove('d-none');
+                    } else if (e.target.value === 'webpage') {
+                        webpageDiv.classList.remove('d-none');
+                    }
+                });
+            }
         }
-        // Round 1 can be open book (check checkbox), Round 2+ is always closed book
-        const openBook = i === 1 ? document.getElementById(`openbook-${i}`).checked : false;
-        rounds.push({ papers, openBook });
-    }
-
-    try {
-        await db.collection('quizzes').add({
-            title, 
-            numRounds, 
-            numQuestions, 
-            randomQuestions, 
-            timeLimitEnabled, 
-            timeLimit, 
-            rounds,
-            createdBy: state.currentUser.uid,
-            createdByName: state.currentUser.displayName,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        bootstrap.Modal.getInstance(document.getElementById('createQuizModal')).hide();
-        document.getElementById('quiz-form').reset();
-        alert('Quiz created successfully!');
-        loadQuizzes();
-    } catch (error) {
-        alert('Failed to create quiz: ' + error.message);
-    }
-});
+    }, 0);
+}
 
 // Start Quiz
 async function startQuiz(quizId) {
@@ -329,13 +454,13 @@ async function loadRound(roundNum) {
                 const questions = data.questions || data.Questions || [];
                 allQuestions.push(...questions);
                 
-                // Get PDF URL from first paper
-                if (allQuestions.length === questions.length) {
+                // Get PDF URL from first paper (fallback)
+                if (allQuestions.length === questions.length && !round.referenceConfig) {
                     pdfUrl = data.pdfUrl || data.pdf || 'textbook.pdf';
                 }
             }
         } catch (error) {
-            console.error(`Error loading paper ${paperId}:`, error);
+            // Silent error handling
         }
     }
     
@@ -344,8 +469,6 @@ async function loadRound(roundNum) {
         showView('homepage');
         return;
     }
-    
-    console.log(`Total questions loaded: ${allQuestions.length}`);
     
     // Randomize if enabled
     if (state.activeQuiz.randomQuestions) {
@@ -362,25 +485,53 @@ async function loadRound(roundNum) {
         paperIds: round.papers
     };
     
-    console.log(`Round ${roundNum} initialized with ${selectedQuestions.length} questions`);
-    
     renderQuestions();
     
-    // Load PDF if open book
+    // Load reference material if open book
     if (round.openBook) {
-        loadPdf(pdfUrl);
+        if (round.referenceConfig) {
+            if (round.referenceConfig.type === 'iframe') {
+                loadIframe(round.referenceConfig.url);
+            } else {
+                loadPdf(round.referenceConfig.url);
+            }
+        } else {
+            // Fallback to PDF
+            loadPdf(pdfUrl);
+        }
     } else {
-        const ctx = elements.pdfCanvas.getContext('2d');
-        ctx.clearRect(0, 0, elements.pdfCanvas.width, elements.pdfCanvas.height);
-        elements.pdfCanvas.width = 600;
-        elements.pdfCanvas.height = 400;
-        ctx.fillStyle = '#64748b';
-        ctx.font = '20px Inter';
-        ctx.textAlign = 'center';
-        ctx.fillText('Closed Book Round', 300, 200);
-        ctx.font = '14px Inter';
-        ctx.fillText('Reference material not available', 300, 230);
+        clearReferenceArea();
     }
+}
+
+function loadIframe(url) {
+    const container = document.querySelector('.col-lg-6:last-child .glass-card');
+    container.innerHTML = `
+        <div class="p-3 border-bottom bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Reference Material</h6>
+                <a href="${url}" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-box-arrow-up-right"></i> Open in New Tab
+                </a>
+            </div>
+        </div>
+        <div class="flex-grow-1 overflow-auto">
+            <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+        </div>
+    `;
+}
+
+function clearReferenceArea() {
+    const ctx = elements.pdfCanvas.getContext('2d');
+    ctx.clearRect(0, 0, elements.pdfCanvas.width, elements.pdfCanvas.height);
+    elements.pdfCanvas.width = 600;
+    elements.pdfCanvas.height = 400;
+    ctx.fillStyle = '#64748b';
+    ctx.font = '20px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('Closed Book Round', 300, 200);
+    ctx.font = '14px Inter';
+    ctx.fillText('Reference material not available', 300, 230);
 }
 
 function renderQuestions() {
@@ -491,7 +642,6 @@ function generateReport() {
     for (let r = 1; r <= state.activeQuiz.numRounds; r++) {
         const roundData = state.roundAnswers[r];
         if (!roundData) {
-            console.warn(`Round ${r} data not found`);
             continue;
         }
         
@@ -542,7 +692,6 @@ function generateReport() {
         });
     }
     
-    console.log('Generated report:', report);
     return report;
 }
 
@@ -550,103 +699,6 @@ function saveReport(report) {
     const reports = JSON.parse(localStorage.getItem('quizReports') || '[]');
     reports.push(report);
     localStorage.setItem('quizReports', JSON.stringify(reports));
-}
-
-function showResults(report) {
-    const totalTime = report.totalTime || 0;
-    const totalMinutes = Math.floor(totalTime / 60);
-    const totalSeconds = totalTime % 60;
-    
-    let html = `
-        <div class="text-center mb-4">
-            <h4 class="fw-bold">${report.quizTitle}</h4>
-            <p class="text-muted">${new Date(report.submittedAt).toLocaleString()}</p>
-            <p class="text-muted">Total Time: ${totalMinutes}m ${totalSeconds}s</p>
-        </div>
-    `;
-    
-    report.rounds.forEach(r => {
-        const percentage = parseFloat(r.percentage) || 0;
-        const grade = percentage >= 80 ? 'Excellent' : percentage >= 60 ? 'Good' : percentage >= 40 ? 'Fair' : 'Needs Improvement';
-        const gradeColor = percentage >= 80 ? 'success' : percentage >= 60 ? 'info' : percentage >= 40 ? 'warning' : 'danger';
-        
-        // Create detailed breakdown
-        let detailsHtml = '';
-        if (r.details && r.details.length > 0) {
-            const correctCount = r.details.filter(d => d.isCorrect).length;
-            const wrongCount = r.details.filter(d => !d.isCorrect && d.userAns !== 'Not answered').length;
-            const skippedCount = r.details.filter(d => d.userAns === 'Not answered').length;
-            
-            detailsHtml = `
-                <div class="mt-2 small">
-                    <span class="badge bg-success me-1">✓ ${correctCount} Correct</span>
-                    <span class="badge bg-danger me-1">✗ ${wrongCount} Wrong</span>
-                    ${skippedCount > 0 ? `<span class="badge bg-secondary">− ${skippedCount} Skipped</span>` : ''}
-                </div>
-            `;
-        }
-        
-        html += `
-            <div class="mb-4 border rounded p-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="mb-0">Round ${r.round} ${r.openBook ? '📖 (Open Book)' : '📕 (Closed Book)'}</h5>
-                    <span class="badge bg-${gradeColor}">${grade}</span>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="fs-4 fw-bold">${r.score || 0}/${r.total || 0}</span>
-                    <span class="fs-4 fw-bold text-${gradeColor}">${percentage.toFixed(1)}%</span>
-                </div>
-                <div class="progress mb-2" style="height: 10px;">
-                    <div class="progress-bar bg-${gradeColor}" style="width: ${percentage}%"></div>
-                </div>
-                ${detailsHtml}
-            </div>
-        `;
-    });
-    
-    // Round comparison - especially useful when comparing same topics (open book vs closed book)
-    if (report.rounds.length === 2) {
-        const r1 = report.rounds[0];
-        const r2 = report.rounds[1];
-        const scoreDiff = (r2.score || 0) - (r1.score || 0);
-        const percent1 = parseFloat(r1.percentage) || 0;
-        const percent2 = parseFloat(r2.percentage) || 0;
-        const percentDiff = (percent2 - percent1).toFixed(1);
-        
-        // Check if same papers used (same topics)
-        const sameTopics = JSON.stringify(r1.paperIds?.sort()) === JSON.stringify(r2.paperIds?.sort());
-        const topicNote = sameTopics ? 
-            '<small class="d-block text-muted mt-2">📚 Same topics tested - comparing open book vs closed book performance</small>' : 
-            '<small class="d-block text-muted mt-2">Different topics in each round</small>';
-        
-        html += `
-            <div class="alert ${scoreDiff > 0 ? 'alert-success' : scoreDiff < 0 ? 'alert-danger' : 'alert-info'} mb-3">
-                <h6 class="alert-heading">📊 Round 2 vs Round 1 Comparison</h6>
-                <div class="row mb-2">
-                    <div class="col-6">
-                        <strong>Round 1:</strong> ${r1.openBook ? '📖 Open Book' : '📕 Closed Book'}<br>
-                        Score: ${r1.score}/${r1.total} (${r1.percentage}%)
-                    </div>
-                    <div class="col-6">
-                        <strong>Round 2:</strong> ${r2.openBook ? '📖 Open Book' : '📕 Closed Book'}<br>
-                        Score: ${r2.score}/${r2.total} (${r2.percentage}%)
-                    </div>
-                </div>
-                <hr>
-                <p class="mb-0 fw-bold">
-                    Performance Change: ${scoreDiff > 0 ? '+' : ''}${scoreDiff} questions 
-                    (${percentDiff > 0 ? '+' : ''}${percentDiff}%)
-                </p>
-                <small>${scoreDiff > 0 ? '🎉 Great improvement! You performed better without the book.' : 
-                        scoreDiff < 0 ? '📚 The book helped! Consider reviewing the material more.' : 
-                        '✓ Consistent performance across both rounds.'}</small>
-                ${topicNote}
-            </div>
-        `;
-    }
-    
-    document.getElementById('results-content').innerHTML = html;
-    new bootstrap.Modal(document.getElementById('resultsModal')).show();
 }
 
 // View Reports
@@ -705,83 +757,531 @@ function viewReportByData(button) {
 
 elements.backToHome.addEventListener('click', () => showView('homepage'));
 
-// PDF Functions
-async function loadPdf(url) {
-    try {
-        const pdf = await pdfjsLib.getDocument(url).promise;
-        state.pdfDocument = pdf;
-        elements.pageCount.textContent = pdf.numPages;
-        renderPdfPage(1);
-    } catch (error) {
-        console.error('PDF load error:', error);
-    }
-}
-
-async function renderPdfPage(num) {
-    if (!state.pdfDocument) return;
-    const page = await state.pdfDocument.getPage(num);
-    const viewport = page.getViewport({ scale: 1.5 });
-    elements.pdfCanvas.width = viewport.width;
-    elements.pdfCanvas.height = viewport.height;
-    await page.render({ canvasContext: elements.pdfCanvas.getContext('2d'), viewport }).promise;
-    state.currentPdfPage = num;
-    elements.pageNum.textContent = num;
-}
-
-elements.prevPage.addEventListener('click', () => renderPdfPage(state.currentPdfPage - 1));
-elements.nextPage.addEventListener('click', () => renderPdfPage(state.currentPdfPage + 1));
-
-// Timer
-function startTimer(seconds) {
-    let remaining = seconds;
-    state.timerInterval = setInterval(() => {
-        remaining--;
-        const m = Math.floor(remaining / 60);
-        const s = remaining % 60;
-        elements.timerDisplay.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-        if (remaining <= 0) {
-            clearInterval(state.timerInterval);
-            alert('Time is up!');
-            submitQuiz();
-        }
-    }, 1000);
-}
-
-// Navigation Prevention
-function preventNavigation() {
-    window.addEventListener('beforeunload', (e) => {
-        if (state.quizInProgress) {
-            e.preventDefault();
-            e.returnValue = '';
-        }
-    });
-}
-
-// View Management
-function showView(view) {
-    elements.homepage.classList.add('d-none');
-    elements.quizInterface.classList.add('d-none');
-    elements.reportsView.classList.add('d-none');
+// URL Parameter Handling
+function checkUrlParameters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const quizId = urlParams.get('quiz');
+    const otp = urlParams.get('otp');
     
-    if (view === 'homepage') elements.homepage.classList.remove('d-none');
-    else if (view === 'quiz') elements.quizInterface.classList.remove('d-none');
-    else if (view === 'reports') elements.reportsView.classList.remove('d-none');
-}
-
-// Utilities
-function shuffleArray(array) {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+    if (quizId) {
+        loadQuizFromUrl(quizId, otp);
     }
-    return arr;
 }
 
-function initEventListeners() {
-    document.getElementById('quiz-search').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const filtered = state.quizzes.filter(q => q.title.toLowerCase().includes(term));
-        renderQuizzes(filtered);
-    });
+async function loadQuizFromUrl(quizId, otp) {
+    try {
+        const doc = await db.collection('quizzes').doc(quizId).get();
+        if (!doc.exists) {
+            alert('Quiz not found');
+            return;
+        }
+        
+        const quizData = doc.data();
+        
+        // Check if quiz is private
+        if (quizData.isPrivate) {
+            if (!otp) {
+                // Show OTP modal
+                showOtpModal(quizId);
+                return;
+            }
+            
+            // Verify OTP
+            const otpValid = await verifyOtp(quizId, otp);
+            if (!otpValid) {
+                alert('Invalid or expired OTP');
+                showOtpModal(quizId);
+                return;
+            }
+        }
+        
+        // Start quiz
+        startQuiz(quizId);
+    } catch (error) {
+        alert('Failed to load quiz: ' + error.message);
+    }
 }
+
+function showOtpModal(quizId) {
+    const modal = new bootstrap.Modal(document.getElementById('otpModal'));
+    modal.show();
+    
+    document.getElementById('verify-otp-btn').onclick = async () => {
+        const otp = document.getElementById('otp-input').value.trim();
+        if (!otp) {
+            alert('Please enter OTP');
+            return;
+        }
+        
+        const valid = await verifyOtp(quizId, otp);
+        if (valid) {
+            modal.hide();
+            startQuiz(quizId);
+        } else {
+            alert('Invalid or expired OTP');
+        }
+    };
+}
+
+async function verifyOtp(quizId, otp) {
+    try {
+        const snapshot = await db.collection('quizzes').doc(quizId).collection('otps')
+            .where('code', '==', otp)
+            .where('used', '==', false)
+            .get();
+        
+        if (snapshot.empty) {
+            return false;
+        }
+        
+        // Mark OTP as used
+        const otpDoc = snapshot.docs[0];
+        await otpDoc.ref.update({ used: true, usedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+// My Quizzes View
+elements.myQuizzesBtn.addEventListener('click', async () => {
+    if (!state.currentUser) {
+        alert('Please login to view your quizzes');
+        return;
+    }
+    
+    const list = document.getElementById('my-quizzes-list');
+    list.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+    
+    try {
+        const snapshot = await db.collection('quizzes')
+            .where('createdBy', '==', state.currentUser.uid)
+            .get();
+        
+        const myQuizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        if (myQuizzes.length === 0) {
+            list.innerHTML = '<p class="text-muted">You haven\'t created any quizzes yet.</p>';
+        } else {
+            list.innerHTML = await Promise.all(myQuizzes.map(async quiz => {
+                const createdAt = quiz.createdAt ? new Date(quiz.createdAt.toDate()).toLocaleDateString() : '';
+                const quizUrl = `${window.location.origin}${window.location.pathname}?quiz=${quiz.id}`;
+                
+                let otpSection = '';
+                if (quiz.isPrivate) {
+                    // Load OTPs for this quiz
+                    const otpSnapshot = await db.collection('quizzes').doc(quiz.id).collection('otps').get();
+                    const otps = otpSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    const otpList = otps.map(otp => `
+                        <div class="d-flex justify-content-between align-items-center mb-1 small">
+                            <code>${otp.code}</code>
+                            <span class="badge ${otp.used ? 'bg-secondary' : 'bg-success'}">
+                                ${otp.used ? 'Used' : 'Active'}
+                            </span>
+                        </div>
+                    `).join('');
+                    
+                    otpSection = `
+                        <div class="mt-3 p-2 bg-light rounded">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong class="small">OTPs:</strong>
+                                <button class="btn btn-sm btn-success" onclick="generateOtp('${quiz.id}')">
+                                    <i class="bi bi-plus"></i> Generate OTP
+                                </button>
+                            </div>
+                            <div id="otp-list-${quiz.id}">
+                                ${otpList || '<small class="text-muted">No OTPs generated yet</small>'}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                return `
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <h5 class="mb-0">${quiz.title}</h5>
+                                <span class="badge ${quiz.isPrivate ? 'bg-warning text-dark' : 'bg-success'}">
+                                    ${quiz.isPrivate ? '🔒 Private' : '🌐 Public'}
+                                </span>
+                            </div>
+                            <div class="mb-2">
+                                <span class="badge bg-primary">${quiz.numRounds} Round${quiz.numRounds > 1 ? 's' : ''}</span>
+                                <span class="badge bg-info">${quiz.numQuestions} Questions</span>
+                            </div>
+                            <small class="text-muted d-block mb-2">Created: ${createdAt}</small>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" value="${quizUrl}" readonly id="url-${quiz.id}">
+                                <button class="btn btn-outline-secondary" onclick="copyQuizUrl('${quiz.id}')">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                            ${otpSection}
+                        </div>
+                    </div>
+                `;
+            })).then(items => items.join(''));
+        }
+        
+        showView('my-quizzes');
+    } catch (error) {
+        list.innerHTML = '<p class="text-danger">Failed to load quizzes: ' + error.message + '</p>';
+    }
+});
+
+elements.backToHomeFromQuizzes.addEventListener('click', () => showView('homepage'));
+
+async function generateOtp(quizId) {
+    if (!state.currentUser) {
+        return;
+    }
+    
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    try {
+        await db.collection('quizzes').doc(quizId).collection('otps').add({
+            code: otp,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: state.currentUser.uid,
+            used: false
+        });
+        
+        alert(`OTP Generated: ${otp}\n\nShare this URL:\n${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`);
+        
+        // Refresh the quiz list
+        elements.myQuizzesBtn.click();
+    } catch (error) {
+        alert('Failed to generate OTP: ' + error.message);
+    }
+}
+
+function copyQuizUrl(quizId) {
+    const input = document.getElementById(`url-${quizId}`);
+    input.select();
+    document.execCommand('copy');
+    alert('Quiz URL copied to clipboard!');
+}
+
+// Download and Share Results
+let currentReport = null;
+
+function showResults(report) {
+    currentReport = report;
+    const totalTime = report.totalTime || 0;
+    const totalMinutes = Math.floor(totalTime / 60);
+    const totalSeconds = totalTime % 60;
+    
+    let html = `
+        <div class="text-center mb-4" id="result-summary">
+            <h4 class="fw-bold">${report.quizTitle}</h4>
+            <p class="text-muted">${new Date(report.submittedAt).toLocaleString()}</p>
+            <p class="text-muted">Total Time: ${totalMinutes}m ${totalSeconds}s</p>
+        </div>
+    `;
+    
+    report.rounds.forEach(r => {
+        const percentage = parseFloat(r.percentage) || 0;
+        const grade = percentage >= 80 ? 'Excellent' : percentage >= 60 ? 'Good' : percentage >= 40 ? 'Fair' : 'Needs Improvement';
+        const gradeColor = percentage >= 80 ? 'success' : percentage >= 60 ? 'info' : percentage >= 40 ? 'warning' : 'danger';
+        
+        let detailsHtml = '';
+        if (r.details && r.details.length > 0) {
+            const correctCount = r.details.filter(d => d.isCorrect).length;
+            const wrongCount = r.details.filter(d => !d.isCorrect && d.userAns !== 'Not answered').length;
+            const skippedCount = r.details.filter(d => d.userAns === 'Not answered').length;
+            
+            detailsHtml = `
+                <div class="mt-2 small">
+                    <span class="badge bg-success me-1">✓ ${correctCount} Correct</span>
+                    <span class="badge bg-danger me-1">✗ ${wrongCount} Wrong</span>
+                    ${skippedCount > 0 ? `<span class="badge bg-secondary">− ${skippedCount} Skipped</span>` : ''}
+                </div>
+            `;
+        }
+        
+        html += `
+            <div class="mb-4 border rounded p-3 result-round">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Round ${r.round} ${r.openBook ? '📖 (Open Book)' : '📕 (Closed Book)'}</h5>
+                    <span class="badge bg-${gradeColor}">${grade}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fs-4 fw-bold">${r.score || 0}/${r.total || 0}</span>
+                    <span class="fs-4 fw-bold text-${gradeColor}">${percentage.toFixed(1)}%</span>
+                </div>
+                <div class="progress mb-2" style="height: 10px;">
+                    <div class="progress-bar bg-${gradeColor}" style="width: ${percentage}%"></div>
+                </div>
+                ${detailsHtml}
+            </div>
+        `;
+    });
+    
+    if (report.rounds.length === 2) {
+        const r1 = report.rounds[0];
+        const r2 = report.rounds[1];
+        const scoreDiff = (r2.score || 0) - (r1.score || 0);
+        const percent1 = parseFloat(r1.percentage) || 0;
+        const percent2 = parseFloat(r2.percentage) || 0;
+        const percentDiff = (percent2 - percent1).toFixed(1);
+        
+        const sameTopics = JSON.stringify(r1.paperIds?.sort()) === JSON.stringify(r2.paperIds?.sort());
+        const topicNote = sameTopics ? 
+            '<small class="d-block text-muted mt-2">📚 Same topics tested - comparing open book vs closed book performance</small>' : 
+            '<small class="d-block text-muted mt-2">Different topics in each round</small>';
+        
+        html += `
+            <div class="alert ${scoreDiff > 0 ? 'alert-success' : scoreDiff < 0 ? 'alert-danger' : 'alert-info'} mb-3 result-comparison">
+                <h6 class="alert-heading">📊 Round 2 vs Round 1 Comparison</h6>
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <strong>Round 1:</strong> ${r1.openBook ? '📖 Open Book' : '📕 Closed Book'}<br>
+                        Score: ${r1.score}/${r1.total} (${r1.percentage}%)
+                    </div>
+                    <div class="col-6">
+                        <strong>Round 2:</strong> ${r2.openBook ? '📖 Open Book' : '📕 Closed Book'}<br>
+                        Score: ${r2.score}/${r2.total} (${r2.percentage}%)
+                    </div>
+                </div>
+                <hr>
+                <p class="mb-0 fw-bold">
+                    Performance Change: ${scoreDiff > 0 ? '+' : ''}${scoreDiff} questions 
+                    (${percentDiff > 0 ? '+' : ''}${percentDiff}%)
+                </p>
+                <small>${scoreDiff > 0 ? '🎉 Great improvement! You performed better without the book.' : 
+                        scoreDiff < 0 ? '📚 The book helped! Consider reviewing the material more.' : 
+                        '✓ Consistent performance across both rounds.'}</small>
+                ${topicNote}
+            </div>
+        `;
+    }
+    
+    document.getElementById('results-content').innerHTML = html;
+    new bootstrap.Modal(document.getElementById('resultsModal')).show();
+}
+
+// Download Result as Image
+document.getElementById('download-result-btn').addEventListener('click', async () => {
+    if (!currentReport) return;
+    
+    try {
+        // Create canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 600 + (currentReport.rounds.length * 150);
+        const ctx = canvas.getContext('2d');
+        
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Title
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 32px Inter, Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(currentReport.quizTitle, 400, 50);
+        
+        // Date
+        ctx.font = '16px Inter, Arial';
+        ctx.fillStyle = '#64748b';
+        ctx.fillText(new Date(currentReport.submittedAt).toLocaleString(), 400, 80);
+        
+        // Time
+        const totalMinutes = Math.floor((currentReport.totalTime || 0) / 60);
+        const totalSeconds = (currentReport.totalTime || 0) % 60;
+        ctx.fillText(`Total Time: ${totalMinutes}m ${totalSeconds}s`, 400, 105);
+        
+        let yPos = 150;
+        
+        // Rounds
+        currentReport.rounds.forEach((r, idx) => {
+            const percentage = parseFloat(r.percentage) || 0;
+            const grade = percentage >= 80 ? 'Excellent' : percentage >= 60 ? 'Good' : percentage >= 40 ? 'Fair' : 'Needs Improvement';
+            
+            // Round box
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(50, yPos, 700, 120);
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(50, yPos, 700, 120);
+            
+            // Round title
+            ctx.fillStyle = '#1e293b';
+            ctx.font = 'bold 24px Inter, Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Round ${r.round} ${r.openBook ? '📖' : '📕'}`, 70, yPos + 35);
+            
+            // Grade
+            ctx.font = '18px Inter, Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(grade, 730, yPos + 35);
+            
+            // Score
+            ctx.font = 'bold 36px Inter, Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${r.score || 0}/${r.total || 0}`, 70, yPos + 80);
+            
+            // Percentage
+            const color = percentage >= 80 ? '#10b981' : percentage >= 60 ? '#3b82f6' : percentage >= 40 ? '#f59e0b' : '#ef4444';
+            ctx.fillStyle = color;
+            ctx.textAlign = 'right';
+            ctx.fillText(`${percentage.toFixed(1)}%`, 730, yPos + 80);
+            
+            // Progress bar
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(70, yPos + 95, 660, 10);
+            ctx.fillStyle = color;
+            ctx.fillRect(70, yPos + 95, (660 * percentage / 100), 10);
+            
+            yPos += 140;
+        });
+        
+        // Convert to blob and download
+        canvas.toBlob(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `quiz-result-${Date.now()}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        alert('Result image downloaded!');
+    } catch (error) {
+        alert('Failed to generate image: ' + error.message);
+    }
+});
+
+// Share Result
+document.getElementById('share-result-btn').addEventListener('click', async () => {
+    if (!currentReport) return;
+    
+    const totalMinutes = Math.floor((currentReport.totalTime || 0) / 60);
+    const totalSeconds = (currentReport.totalTime || 0) % 60;
+    
+    let text = `📊 Quiz Results: ${currentReport.quizTitle}\n`;
+    text += `⏱️ Time: ${totalMinutes}m ${totalSeconds}s\n\n`;
+    
+    currentReport.rounds.forEach(r => {
+        const percentage = parseFloat(r.percentage) || 0;
+        text += `Round ${r.round} ${r.openBook ? '📖' : '📕'}: ${r.score}/${r.total} (${percentage.toFixed(1)}%)\n`;
+    });
+    
+    if (currentReport.rounds.length === 2) {
+        const r1 = currentReport.rounds[0];
+        const r2 = currentReport.rounds[1];
+        const scoreDiff = (r2.score || 0) - (r1.score || 0);
+        text += `\n📈 Improvement: ${scoreDiff > 0 ? '+' : ''}${scoreDiff} questions`;
+    }
+    
+    // Try Web Share API
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Quiz Results',
+                text: text
+            });
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                fallbackShare(text);
+            }
+        }
+    } else {
+        fallbackShare(text);
+    }
+});
+
+function fallbackShare(text) {
+    // WhatsApp share
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(whatsappUrl, '_blank');
+}
+
+// Update save quiz to include privacy and reference settings
+document.getElementById('save-quiz-btn').addEventListener('click', async () => {
+    if (!state.currentUser) {
+        alert('Please login to create quizzes');
+        return;
+    }
+    
+    const title = document.getElementById('quiz-title').value;
+    if (!title.trim()) {
+        alert('Please enter a quiz title');
+        return;
+    }
+    
+    const isPrivate = document.getElementById('quiz-private').checked;
+    const numRounds = parseInt(document.getElementById('num-rounds').value);
+    const numQuestions = parseInt(document.getElementById('num-questions').value);
+    const randomQuestions = document.getElementById('random-questions').checked;
+    const timeLimitEnabled = document.getElementById('time-limit-enabled').checked;
+    const timeLimit = parseInt(document.getElementById('time-limit').value);
+
+    const rounds = [];
+    for (let i = 1; i <= numRounds; i++) {
+        const papers = Array.from(document.querySelector(`[data-round="${i}"]`).selectedOptions).map(o => o.value);
+        if (papers.length === 0) {
+            alert(`Please select at least one question paper for Round ${i}`);
+            return;
+        }
+        
+        const openBook = i === 1 ? document.getElementById(`openbook-${i}`).checked : false;
+        
+        let referenceConfig = null;
+        if (openBook) {
+            const refType = document.getElementById(`ref-type-${i}`).value;
+            
+            if (refType === 'pdf-url') {
+                const pdfUrl = document.getElementById(`pdf-url-input-${i}`).value;
+                if (!pdfUrl) {
+                    alert(`Please enter a PDF URL for Round ${i}`);
+                    return;
+                }
+                referenceConfig = {
+                    type: 'pdf',
+                    url: pdfUrl
+                };
+            } else if (refType === 'webpage') {
+                const webpageUrl = document.getElementById(`webpage-url-input-${i}`).value;
+                if (!webpageUrl) {
+                    alert(`Please enter a web page URL for Round ${i}`);
+                    return;
+                }
+                referenceConfig = {
+                    type: 'iframe',
+                    url: webpageUrl
+                };
+            }
+        }
+        
+        rounds.push({ papers, openBook, referenceConfig });
+    }
+
+    const quizData = {
+        title, 
+        isPrivate,
+        numRounds, 
+        numQuestions, 
+        randomQuestions, 
+        timeLimitEnabled, 
+        timeLimit, 
+        rounds,
+        createdBy: state.currentUser.uid,
+        createdByName: state.currentUser.displayName,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    try {
+        const docRef = await db.collection('quizzes').add(quizData);
+        
+        bootstrap.Modal.getInstance(document.getElementById('createQuizModal')).hide();
+        document.getElementById('quiz-form').reset();
+        alert('Quiz created successfully!');
+        loadQuizzes();
+    } catch (error) {
+        alert('Failed to create quiz: ' + error.message);
+    }
+});
