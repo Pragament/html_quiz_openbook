@@ -99,8 +99,6 @@ function preventNavigation() {
 
 // View Management
 function showView(view) {
-    console.log('🔄 Switching to view:', view);
-    
     elements.homepage.classList.add('d-none');
     elements.quizInterface.classList.add('d-none');
     elements.reportsView.classList.add('d-none');
@@ -115,21 +113,16 @@ function showView(view) {
     } else if (view === 'my-quizzes') {
         elements.myQuizzesView.classList.remove('d-none');
     }
-    
-    console.log('✅ View switched to:', view);
 }
 
 // PDF Functions
 async function loadPdf(url) {
     try {
-        console.log('📄 Loading PDF:', url);
         const pdf = await pdfjsLib.getDocument(url).promise;
         state.pdfDocument = pdf;
         elements.pageCount.textContent = pdf.numPages;
         await renderPdfPage(1);
-        console.log('✅ PDF loaded successfully');
     } catch (error) {
-        console.error('❌ PDF load error:', error);
         alert('Failed to load PDF: ' + error.message);
     }
 }
@@ -149,7 +142,7 @@ async function renderPdfPage(num) {
         state.currentPdfPage = num;
         elements.pageNum.textContent = num;
     } catch (error) {
-        console.error('❌ Error rendering PDF page:', error);
+        // Silent error handling
     }
 }
 
@@ -287,15 +280,10 @@ function renderQuizzes(quizzes) {
 // Load Question Papers
 async function loadQuestionPapers() {
     try {
-        console.log('🔍 Loading question papers from Firestore...');
-        
         const [lower, upper] = await Promise.all([
             db.collection('questionpapers').get().catch(() => ({ docs: [] })),
             db.collection('QuestionPapers').get().catch(() => ({ docs: [] }))
         ]);
-        
-        console.log(`📄 Found ${lower.docs.length} papers in 'questionpapers' collection`);
-        console.log(`📄 Found ${upper.docs.length} papers in 'QuestionPapers' collection`);
         
         const papers = new Map();
         
@@ -317,37 +305,8 @@ async function loadQuestionPapers() {
         });
         
         state.questionPapers = Array.from(papers.values());
-        
-        console.log(`✅ Loaded ${state.questionPapers.length} unique question papers`);
-        console.log('📋 Question Papers Details:');
-        console.table(state.questionPapers.map(p => ({
-            ID: p.id,
-            Title: p.title,
-            Subject: p.subject || 'N/A',
-            Class: p.class || 'N/A',
-            Questions: p.questionCount,
-            Collection: p.collection,
-            PDF: p.pdfUrl
-        })));
-        
-        // Print full details of each paper
-        state.questionPapers.forEach((paper, index) => {
-            console.group(`📝 Paper ${index + 1}: ${paper.title}`);
-            console.log('ID:', paper.id);
-            console.log('Collection:', paper.collection);
-            console.log('Subject:', paper.subject || 'N/A');
-            console.log('Class:', paper.class || 'N/A');
-            console.log('Total Questions:', paper.questionCount);
-            console.log('PDF URL:', paper.pdfUrl);
-            console.log('Sample Questions (first 3):');
-            paper.questions.slice(0, 3).forEach((q, i) => {
-                console.log(`  Q${i + 1}:`, q.Question || q.question || 'No question text');
-            });
-            console.groupEnd();
-        });
-        
     } catch (error) {
-        console.error('❌ Failed to load question papers:', error);
+        // Silent error handling
     }
 }
 
@@ -501,7 +460,7 @@ async function loadRound(roundNum) {
                 }
             }
         } catch (error) {
-            console.error(`Error loading paper ${paperId}:`, error);
+            // Silent error handling
         }
     }
     
@@ -510,8 +469,6 @@ async function loadRound(roundNum) {
         showView('homepage');
         return;
     }
-    
-    console.log(`Total questions loaded: ${allQuestions.length}`);
     
     // Randomize if enabled
     if (state.activeQuiz.randomQuestions) {
@@ -527,8 +484,6 @@ async function loadRound(roundNum) {
         startTime: Date.now(),
         paperIds: round.papers
     };
-    
-    console.log(`Round ${roundNum} initialized with ${selectedQuestions.length} questions`);
     
     renderQuestions();
     
@@ -687,7 +642,6 @@ function generateReport() {
     for (let r = 1; r <= state.activeQuiz.numRounds; r++) {
         const roundData = state.roundAnswers[r];
         if (!roundData) {
-            console.warn(`Round ${r} data not found`);
             continue;
         }
         
@@ -738,7 +692,6 @@ function generateReport() {
         });
     }
     
-    console.log('Generated report:', report);
     return report;
 }
 
@@ -810,62 +763,41 @@ function checkUrlParameters() {
     const quizId = urlParams.get('quiz');
     const otp = urlParams.get('otp');
     
-    console.log('🔍 Checking URL parameters...');
-    console.log('   Quiz ID:', quizId);
-    console.log('   OTP:', otp);
-    
     if (quizId) {
-        console.log('✅ Quiz ID found in URL, loading quiz...');
         loadQuizFromUrl(quizId, otp);
-    } else {
-        console.log('ℹ️ No quiz ID in URL');
     }
 }
 
 async function loadQuizFromUrl(quizId, otp) {
     try {
-        console.log('🔗 Loading quiz from URL:', quizId, 'OTP:', otp);
-        
         const doc = await db.collection('quizzes').doc(quizId).get();
         if (!doc.exists) {
-            console.error('❌ Quiz not found:', quizId);
             alert('Quiz not found');
             return;
         }
         
         const quizData = doc.data();
-        console.log('📋 Quiz data:', quizData);
         
         // Check if quiz is private
         if (quizData.isPrivate) {
-            console.log('🔒 Quiz is private, checking OTP...');
-            
             if (!otp) {
-                console.log('⚠️ No OTP provided, showing OTP modal');
                 // Show OTP modal
                 showOtpModal(quizId);
                 return;
             }
             
             // Verify OTP
-            console.log('🔑 Verifying OTP:', otp);
             const otpValid = await verifyOtp(quizId, otp);
             if (!otpValid) {
-                console.error('❌ Invalid OTP');
                 alert('Invalid or expired OTP');
                 showOtpModal(quizId);
                 return;
             }
-            console.log('✅ OTP verified successfully');
-        } else {
-            console.log('🌐 Quiz is public, no OTP required');
         }
         
         // Start quiz
-        console.log('🚀 Starting quiz...');
         startQuiz(quizId);
     } catch (error) {
-        console.error('❌ Failed to load quiz:', error);
         alert('Failed to load quiz: ' + error.message);
     }
 }
@@ -893,81 +825,54 @@ function showOtpModal(quizId) {
 
 async function verifyOtp(quizId, otp) {
     try {
-        console.log('🔍 Verifying OTP in Firestore...');
-        console.log('   Quiz ID:', quizId);
-        console.log('   OTP Code:', otp);
-        
         const snapshot = await db.collection('quizzes').doc(quizId).collection('otps')
             .where('code', '==', otp)
             .where('used', '==', false)
             .get();
         
-        console.log('   Found OTPs:', snapshot.size);
-        
         if (snapshot.empty) {
-            console.log('❌ No matching OTP found');
             return false;
         }
         
         // Mark OTP as used
         const otpDoc = snapshot.docs[0];
-        console.log('✅ OTP found, marking as used...');
         await otpDoc.ref.update({ used: true, usedAt: firebase.firestore.FieldValue.serverTimestamp() });
-        console.log('✅ OTP marked as used');
         
         return true;
     } catch (error) {
-        console.error('❌ OTP verification error:', error);
         return false;
     }
 }
 
 // My Quizzes View
 elements.myQuizzesBtn.addEventListener('click', async () => {
-    console.log('📋 My Quizzes button clicked');
-    
     if (!state.currentUser) {
-        console.error('❌ User not logged in');
         alert('Please login to view your quizzes');
         return;
     }
-    
-    console.log('✅ User logged in:', state.currentUser.displayName, 'UID:', state.currentUser.uid);
     
     const list = document.getElementById('my-quizzes-list');
     list.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
     
     try {
-        console.log('🔍 Fetching quizzes created by user...');
         const snapshot = await db.collection('quizzes')
             .where('createdBy', '==', state.currentUser.uid)
             .get();
         
-        console.log(`📊 Found ${snapshot.size} quizzes`);
-        
         const myQuizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        console.log('📋 My Quizzes:', myQuizzes);
-        
         if (myQuizzes.length === 0) {
-            console.log('ℹ️ No quizzes found');
             list.innerHTML = '<p class="text-muted">You haven\'t created any quizzes yet.</p>';
         } else {
             list.innerHTML = await Promise.all(myQuizzes.map(async quiz => {
-                console.log(`📝 Processing quiz: ${quiz.title} (${quiz.id})`);
-                console.log(`   Private: ${quiz.isPrivate}`);
-                
                 const createdAt = quiz.createdAt ? new Date(quiz.createdAt.toDate()).toLocaleDateString() : '';
                 const quizUrl = `${window.location.origin}${window.location.pathname}?quiz=${quiz.id}`;
                 
                 let otpSection = '';
                 if (quiz.isPrivate) {
-                    console.log(`🔒 Loading OTPs for private quiz: ${quiz.id}`);
                     // Load OTPs for this quiz
                     const otpSnapshot = await db.collection('quizzes').doc(quiz.id).collection('otps').get();
                     const otps = otpSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    
-                    console.log(`   Found ${otps.length} OTPs`);
                     
                     const otpList = otps.map(otp => `
                         <div class="d-flex justify-content-between align-items-center mb-1 small">
@@ -1020,10 +925,8 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
             })).then(items => items.join(''));
         }
         
-        console.log('✅ My Quizzes view rendered');
         showView('my-quizzes');
     } catch (error) {
-        console.error('❌ Failed to load quizzes:', error);
         list.innerHTML = '<p class="text-danger">Failed to load quizzes: ' + error.message + '</p>';
     }
 });
@@ -1032,15 +935,11 @@ elements.backToHomeFromQuizzes.addEventListener('click', () => showView('homepag
 
 async function generateOtp(quizId) {
     if (!state.currentUser) {
-        console.error('❌ User not logged in');
         return;
     }
     
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    console.log('🔑 Generating OTP for quiz:', quizId);
-    console.log('   OTP Code:', otp);
     
     try {
         await db.collection('quizzes').doc(quizId).collection('otps').add({
@@ -1050,13 +949,11 @@ async function generateOtp(quizId) {
             used: false
         });
         
-        console.log('✅ OTP saved to Firestore');
         alert(`OTP Generated: ${otp}\n\nShare this URL:\n${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`);
         
         // Refresh the quiz list
         elements.myQuizzesBtn.click();
     } catch (error) {
-        console.error('❌ Failed to generate OTP:', error);
         alert('Failed to generate OTP: ' + error.message);
     }
 }
@@ -1305,58 +1202,41 @@ function fallbackShare(text) {
 
 // Update save quiz to include privacy and reference settings
 document.getElementById('save-quiz-btn').addEventListener('click', async () => {
-    console.log('💾 Save Quiz button clicked');
-    
     if (!state.currentUser) {
-        console.error('❌ User not logged in');
         alert('Please login to create quizzes');
         return;
     }
     
-    console.log('✅ User logged in:', state.currentUser.displayName);
-    
     const title = document.getElementById('quiz-title').value;
     if (!title.trim()) {
-        console.error('❌ Quiz title is empty');
         alert('Please enter a quiz title');
         return;
     }
     
-    console.log('📝 Quiz title:', title);
-    
     const isPrivate = document.getElementById('quiz-private').checked;
-    console.log('🔒 Is Private:', isPrivate);
-    
     const numRounds = parseInt(document.getElementById('num-rounds').value);
     const numQuestions = parseInt(document.getElementById('num-questions').value);
     const randomQuestions = document.getElementById('random-questions').checked;
     const timeLimitEnabled = document.getElementById('time-limit-enabled').checked;
     const timeLimit = parseInt(document.getElementById('time-limit').value);
 
-    console.log('⚙️ Quiz settings:', { numRounds, numQuestions, randomQuestions, timeLimitEnabled, timeLimit });
-
     const rounds = [];
     for (let i = 1; i <= numRounds; i++) {
         const papers = Array.from(document.querySelector(`[data-round="${i}"]`).selectedOptions).map(o => o.value);
         if (papers.length === 0) {
-            console.error(`❌ No papers selected for Round ${i}`);
             alert(`Please select at least one question paper for Round ${i}`);
             return;
         }
-        
-        console.log(`📄 Round ${i} papers:`, papers);
         
         const openBook = i === 1 ? document.getElementById(`openbook-${i}`).checked : false;
         
         let referenceConfig = null;
         if (openBook) {
             const refType = document.getElementById(`ref-type-${i}`).value;
-            console.log(`📖 Round ${i} reference type:`, refType);
             
             if (refType === 'pdf-url') {
                 const pdfUrl = document.getElementById(`pdf-url-input-${i}`).value;
                 if (!pdfUrl) {
-                    console.error(`❌ PDF URL empty for Round ${i}`);
                     alert(`Please enter a PDF URL for Round ${i}`);
                     return;
                 }
@@ -1367,7 +1247,6 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
             } else if (refType === 'webpage') {
                 const webpageUrl = document.getElementById(`webpage-url-input-${i}`).value;
                 if (!webpageUrl) {
-                    console.error(`❌ Webpage URL empty for Round ${i}`);
                     alert(`Please enter a web page URL for Round ${i}`);
                     return;
                 }
@@ -1376,7 +1255,6 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
                     url: webpageUrl
                 };
             }
-            console.log(`📖 Round ${i} reference config:`, referenceConfig);
         }
         
         rounds.push({ papers, openBook, referenceConfig });
@@ -1395,19 +1273,15 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
         createdByName: state.currentUser.displayName,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
-    
-    console.log('💾 Saving quiz to Firestore:', quizData);
 
     try {
         const docRef = await db.collection('quizzes').add(quizData);
-        console.log('✅ Quiz created successfully! ID:', docRef.id);
         
         bootstrap.Modal.getInstance(document.getElementById('createQuizModal')).hide();
         document.getElementById('quiz-form').reset();
         alert('Quiz created successfully!');
         loadQuizzes();
     } catch (error) {
-        console.error('❌ Failed to create quiz:', error);
         alert('Failed to create quiz: ' + error.message);
     }
 });
