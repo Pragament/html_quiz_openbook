@@ -1,6 +1,6 @@
 # Quiz Platform
 
-A comprehensive multi-round quiz application with Firebase authentication, open book vs closed book testing, and detailed progress tracking.
+A comprehensive multi-round quiz application with Firebase authentication, private quiz management with OTP system, open book vs closed book testing, and detailed progress tracking with downloadable results.
 
 ## 🎯 Key Features
 
@@ -8,32 +8,72 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
 
 #### Authenticated Users (Google Login)
 - ✅ Create custom quizzes (saved to Firestore)
+- ✅ Create **private quizzes** with OTP access control
+- ✅ Generate and manage OTPs for private quizzes
+- ✅ View "My Quizzes" dashboard
 - ✅ Take any quiz
 - ✅ View detailed results and reports
+- ✅ Download results as images
+- ✅ Share results via WhatsApp/social media
 - ✅ Access historical reports (localStorage)
 
 #### Anonymous Users (No Login Required)
-- ✅ Browse all available quizzes
-- ✅ Take any quiz
+- ✅ Browse all **public** quizzes
+- ✅ Take public quizzes
+- ✅ Access private quizzes with valid OTP
 - ✅ View results after submission
+- ✅ Download and share results
 - ✅ Access past reports (localStorage)
 - ❌ Cannot create quizzes
+- ❌ Cannot generate OTPs
+
+### 🔒 Private Quiz System (NEW!)
+
+**Create Private Quizzes:**
+- Toggle between Public/Private when creating quiz
+- Private quizzes hidden from homepage
+- Only accessible via direct URL with OTP
+
+**OTP Management:**
+- Generate unlimited 6-digit OTPs per quiz
+- Single-use OTPs (marked as used after access)
+- View OTP status (Active/Used)
+- Share quiz URL with OTP: `?quiz=ID&otp=123456`
+
+**Access Control:**
+- Private quizzes require OTP to access
+- OTP modal shown if accessed without valid OTP
+- Automatic OTP verification
+- Quiz owner can view all OTPs in "My Quizzes"
 
 ### 📝 Quiz Creation (Authenticated Users Only)
 
 **Configuration Options:**
 - Quiz title and description
+- **Visibility**: Public or Private
 - Number of rounds: 1-2
 - Number of questions per quiz
 - Random question order: Yes/No
 - Time limit: Optional with auto-submit
 - Question paper selection: Multiple papers per round
 
+**Reference Material Options (Round 1):**
+- **PDF URL**: Enter PDF filename or URL (e.g., `textbook.pdf` or `https://example.com/doc.pdf`)
+- **Web Page (iframe)**: Embed any website as reference (e.g., Wikipedia, documentation)
+
 **Round Configuration:**
-- **Round 1**: Can be Open Book (PDF reference available)
+- **Round 1**: Can be Open Book with PDF or webpage reference
 - **Round 2**: Always Closed Book (no reference material)
 - Select different or same question papers per round
 - Combine multiple question papers in one round
+
+### 🌐 URL-Based Quiz Access (NEW!)
+
+**Direct Quiz Links:**
+- Share quiz via URL: `?quiz=QUIZ_ID`
+- Access private quizzes: `?quiz=QUIZ_ID&otp=123456`
+- Automatic quiz loading from URL parameters
+- Perfect for sharing with students
 
 ### 🎓 Quiz Taking Experience
 
@@ -44,9 +84,10 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
 
 **Open Book Mode (Round 1):**
 - Split-screen interface
-- Questions on left, PDF viewer on right
-- Navigate PDF pages while answering
-- Search within PDF (basic)
+- Questions on left, reference material on right
+- **PDF Viewer**: Navigate pages, zoom, search
+- **Web Page Viewer**: Embedded website with "Open in New Tab" option
+- Choose reference type when creating quiz
 
 **Closed Book Mode (Round 2):**
 - Questions only interface
@@ -77,6 +118,18 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
 - Visual progress bars
 - Breakdown: ✓ Correct, ✗ Wrong, − Skipped
 
+**Download Results (NEW!):**
+- Click "Download Result" button
+- Generates professional PNG image
+- Includes all scores, percentages, and progress bars
+- Perfect for sharing or printing
+
+**Share Results (NEW!):**
+- Click "Share" button
+- Uses native Web Share API (mobile)
+- WhatsApp fallback (desktop)
+- Formatted text with all scores and improvements
+
 **Round Comparison:**
 - Side-by-side Round 1 vs Round 2 comparison
 - Performance change calculation
@@ -91,13 +144,25 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
 - Sorted by date (newest first)
 - Average score badges (color-coded)
 - Quick access to detailed breakdowns
+- Download or share any past result
 - Stored locally in browser
+
+### 📱 My Quizzes Dashboard (NEW!)
+
+**For Quiz Creators:**
+- View all your created quizzes
+- See quiz visibility status (🔒 Private / 🌐 Public)
+- Copy quiz URLs to share
+- Generate OTPs for private quizzes
+- View OTP status (Active/Used)
+- Manage multiple OTPs per quiz
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 - Modern web browser (Chrome, Firefox, Edge, Safari)
 - Local web server (for CORS compliance)
+- **Disable ad blockers** (they may block Firestore connections)
 
 ### Installation & Setup
 
@@ -130,20 +195,24 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
    - Refresh main app
 
 4. **Start using the app:**
-   - Browse quizzes (no login needed)
+   - Browse public quizzes (no login needed)
    - Login to create custom quizzes
-   - Take quizzes and view results
+   - Create private quizzes with OTP
+   - Take quizzes and download/share results
 
 ## 🗄️ Data Storage
 
 ### Firestore (Cloud Database)
 **Stored:**
 - Quiz configurations (created by authenticated users)
+- Quiz visibility (public/private)
+- OTPs for private quizzes (subcollection)
 - Question papers with questions and correct answers
 - Creator information and timestamps
 
 **Collections:**
 - `quizzes` - All quiz configurations
+  - `otps` (subcollection) - OTPs for private quizzes
 - `questionpapers` / `QuestionPapers` - Question banks
 
 ### LocalStorage (Browser Storage)
@@ -167,6 +236,7 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
 ```javascript
 {
   title: "Science Test - Open vs Closed Book",
+  isPrivate: false,  // NEW: true for private quizzes
   numRounds: 2,
   numQuestions: 10,
   randomQuestions: true,
@@ -175,16 +245,33 @@ A comprehensive multi-round quiz application with Firebase authentication, open 
   rounds: [
     { 
       papers: ["math-algebra-grade8", "science-general-grade8"], 
-      openBook: true 
+      openBook: true,
+      referenceConfig: {  // NEW: Reference material configuration
+        type: "pdf",  // or "iframe"
+        url: "textbook.pdf"  // or "https://example.com"
+      }
     },
     { 
       papers: ["math-algebra-grade8", "science-general-grade8"], 
-      openBook: false 
+      openBook: false,
+      referenceConfig: null
     }
   ],
   createdBy: "user-uid",
   createdByName: "John Doe",
   createdAt: Timestamp
+}
+```
+
+### OTP Document (Firestore Subcollection)
+```javascript
+// Path: quizzes/{quizId}/otps/{otpId}
+{
+  code: "123456",  // 6-digit OTP
+  used: false,  // true after first use
+  createdAt: Timestamp,
+  createdBy: "user-uid",
+  usedAt: Timestamp  // set when used
 }
 ```
 
@@ -252,6 +339,33 @@ const firebaseConfig = {
 };
 ```
 
+**Firestore Security Rules:**
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /quizzes/{quizId} {
+      allow read: if true;  // All can read
+      allow write: if request.auth != null;  // Only authenticated can write
+      
+      match /otps/{otpId} {
+        allow read, write: if request.auth != null;  // Only authenticated
+      }
+    }
+    
+    match /questionpapers/{paperId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    match /QuestionPapers/{paperId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
+```
+
 ## 📚 Question Paper Requirements
 
 For proper scoring, question papers must include:
@@ -273,28 +387,41 @@ For proper scoring, question papers must include:
 - Test knowledge retention (open book vs closed book)
 - Compare learning effectiveness
 - Identify areas needing improvement
+- Private assessments with OTP control
 
 ### Practice & Learning
 - Open book mode for learning phase
 - Closed book mode for testing phase
 - Immediate feedback and scoring
+- Web-based reference materials
 
 ### Assessment
 - Timed assessments with auto-submit
 - Multiple rounds for comprehensive testing
 - Detailed performance analytics
+- Downloadable and shareable results
+- Private quizzes for controlled access
+
+### Remote Learning
+- Share quiz links with students
+- OTP-based access for private assessments
+- Web page references (Wikipedia, documentation)
+- Results sharing via WhatsApp/social media
 
 ## 🔒 Security & Privacy
 
 - Quiz creation requires authentication
+- Private quizzes with OTP protection
+- Single-use OTPs prevent sharing
 - Anonymous quiz taking supported
 - Reports stored locally (privacy-focused)
-- Navigation prevention during active quiz
 - No personal data sent to server for reports
+- Navigation prevention during active quiz
 
 ## 📖 Documentation
 
-- `FEATURES.md` - Complete feature list
+- `FEATURES.md` - Complete feature list with examples
+- `TROUBLESHOOTING.md` - Common issues and solutions
 - `USER_PERMISSIONS.md` - User access control details
 - `DEMO_GUIDE.md` - Usage guide and examples
 - `UPLOAD_TO_FIREBASE.md` - Question paper upload instructions
@@ -307,8 +434,15 @@ For proper scoring, question papers must include:
 - Visual progress tracking
 - Smooth animations
 - Intuitive navigation
+- Split-screen quiz interface
+- PDF and webpage viewers
 
 ## 🐛 Troubleshooting
+
+**Firestore Connection Blocked:**
+- Disable ad blocker or whitelist `firestore.googleapis.com`
+- Check browser console for `ERR_BLOCKED_BY_CLIENT`
+- Try incognito/private mode
 
 **Scoring shows 0/10:**
 - Ensure question papers have "Correct Option" field
@@ -320,10 +454,20 @@ For proper scoring, question papers must include:
 - Check `pdfUrl` field in question paper
 - Verify CORS settings on server
 
+**OTP not working:**
+- Check console logs for detailed OTP verification steps
+- Ensure quiz is marked as private (`isPrivate: true`)
+- Verify OTP hasn't been used already
+
 **Reports not saving:**
 - Check browser localStorage is enabled
 - Verify no browser extensions blocking storage
 - Check browser console for errors
+
+**My Quizzes not showing:**
+- Ensure you're logged in
+- Check console for Firestore query errors
+- Verify quizzes have `createdBy` field
 
 ## 🤝 Contributing
 
@@ -343,3 +487,5 @@ Built with:
 - Bootstrap 5 (UI Framework)
 - PDF.js (PDF Viewing)
 - Bootstrap Icons
+- Canvas API (Result image generation)
+- Web Share API (Result sharing)

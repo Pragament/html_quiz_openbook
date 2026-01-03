@@ -44,6 +44,9 @@
                 <button id="create-quiz-btn" class="btn btn-success d-none">
                     <i class="bi bi-plus-circle"></i> Create Quiz
                 </button>
+                <button id="my-quizzes-btn" class="btn btn-secondary d-none">
+                    <i class="bi bi-list-check"></i> My Quizzes
+                </button>
                 <button id="view-reports-btn" class="btn btn-info">
                     <i class="bi bi-file-text"></i> View Reports
                 </button>
@@ -66,6 +69,21 @@
                         <div class="mb-3">
                             <label class="form-label">Quiz Title</label>
                             <input type="text" class="form-control" id="quiz-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quiz Visibility</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-public" value="public" checked>
+                                <label class="form-check-label" for="quiz-public">
+                                    <strong>Public</strong> - Visible on homepage and searchable
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-private" value="private">
+                                <label class="form-check-label" for="quiz-private">
+                                    <strong>Private</strong> - Only accessible via URL with OTP
+                                </label>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Number of Rounds</label>
@@ -172,6 +190,37 @@
         <div id="reports-list"></div>
     </div>
 
+    <!-- My Quizzes View -->
+    <div id="my-quizzes-view" class="container py-5 d-none">
+        <div class="mb-4">
+            <button id="back-to-home-from-quizzes" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Home
+            </button>
+        </div>
+        <h2 class="mb-4">My Quizzes</h2>
+        <div id="my-quizzes-list"></div>
+    </div>
+
+    <!-- OTP Modal -->
+    <div class="modal fade" id="otpModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Enter OTP</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>This is a private quiz. Please enter the OTP to access it.</p>
+                    <input type="text" class="form-control" id="otp-input" placeholder="Enter OTP">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="verify-otp-btn">Verify</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Results Modal -->
     <div class="modal fade" id="resultsModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -182,6 +231,12 @@
                 </div>
                 <div class="modal-body" id="results-content"></div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-success" id="download-result-btn">
+                        <i class="bi bi-download"></i> Download Result
+                    </button>
+                    <button type="button" class="btn btn-info" id="share-result-btn">
+                        <i class="bi bi-share"></i> Share
+                    </button>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
