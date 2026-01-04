@@ -770,34 +770,47 @@ function checkUrlParameters() {
 
 async function loadQuizFromUrl(quizId, otp) {
     try {
+        console.log('🔗 Loading quiz from URL:', quizId, 'OTP:', otp);
+        
         const doc = await db.collection('quizzes').doc(quizId).get();
         if (!doc.exists) {
+            console.error('❌ Quiz not found:', quizId);
             alert('Quiz not found');
             return;
         }
         
         const quizData = doc.data();
+        console.log('📋 Quiz data:', quizData);
         
         // Check if quiz is private
         if (quizData.isPrivate) {
+            console.log('🔒 Quiz is private, checking OTP...');
+            
             if (!otp) {
-                // Show OTP modal
+                console.log('⚠️ No OTP in URL, showing OTP modal');
+                // Show OTP modal only if no OTP in URL
                 showOtpModal(quizId);
                 return;
             }
             
-            // Verify OTP
+            // OTP is in URL, verify it directly
+            console.log('🔑 OTP found in URL, verifying:', otp);
             const otpValid = await verifyOtp(quizId, otp);
             if (!otpValid) {
-                alert('Invalid or expired OTP');
-                showOtpModal(quizId);
+                console.error('❌ Invalid OTP from URL');
+                alert('Invalid or expired OTP. Please contact the quiz creator for a valid link.');
                 return;
             }
+            console.log('✅ OTP verified successfully from URL');
+        } else {
+            console.log('🌐 Quiz is public, no OTP required');
         }
         
         // Start quiz
+        console.log('🚀 Starting quiz...');
         startQuiz(quizId);
     } catch (error) {
+        console.error('❌ Failed to load quiz:', error);
         alert('Failed to load quiz: ' + error.message);
     }
 }
@@ -874,25 +887,32 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
                     const otpSnapshot = await db.collection('quizzes').doc(quiz.id).collection('otps').get();
                     const otps = otpSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    const otpList = otps.map(otp => `
-                        <div class="d-flex justify-content-between align-items-center mb-1 small">
-                            <code>${otp.code}</code>
-                            <span class="badge ${otp.used ? 'bg-secondary' : 'bg-success'}">
-                                ${otp.used ? 'Used' : 'Active'}
-                            </span>
+                    const otpList = otps.length > 0 ? otps.map(otp => `
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded bg-white">
+                            <div class="d-flex align-items-center">
+                                <code class="me-2 fs-6 fw-bold">${otp.code}</code>
+                                <span class="badge ${otp.used ? 'bg-secondary' : 'bg-success'}">
+                                    ${otp.used ? 'Used' : 'Active'}
+                                </span>
+                            </div>
+                            ${!otp.used ? `
+                                <button class="btn btn-sm btn-primary" onclick="shareOtpUrl('${quiz.id}', '${otp.code}')" title="Share URL with OTP">
+                                    <i class="bi bi-share-fill"></i> Share
+                                </button>
+                            ` : ''}
                         </div>
-                    `).join('');
+                    `).join('') : '<small class="text-muted">No OTPs generated yet. Click "Generate OTP" to create one.</small>';
                     
                     otpSection = `
-                        <div class="mt-3 p-2 bg-light rounded">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong class="small">OTPs:</strong>
+                        <div class="mt-3 p-3 bg-light rounded border">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <strong>Access Codes (OTPs):</strong>
                                 <button class="btn btn-sm btn-success" onclick="generateOtp('${quiz.id}')">
-                                    <i class="bi bi-plus"></i> Generate OTP
+                                    <i class="bi bi-plus-circle"></i> Generate OTP
                                 </button>
                             </div>
                             <div id="otp-list-${quiz.id}">
-                                ${otpList || '<small class="text-muted">No OTPs generated yet</small>'}
+                                ${otpList}
                             </div>
                         </div>
                     `;
@@ -963,6 +983,42 @@ function copyQuizUrl(quizId) {
     input.select();
     document.execCommand('copy');
     alert('Quiz URL copied to clipboard!');
+}
+
+function shareOtpUrl(quizId, otp) {
+    const url = `${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`;
+    
+    console.log('📤 Sharing OTP URL:', url);
+    
+    // Try to copy to clipboard
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert(`OTP URL copied to clipboard!\n\n${url}\n\nShare this URL with students.`);
+        }).catch(() => {
+            // Fallback
+            showUrlDialog(url);
+        });
+    } else {
+        showUrlDialog(url);
+    }
+}
+
+function showUrlDialog(url) {
+    const message = `Share this URL with students:\n\n${url}`;
+    
+    // Try Web Share API (mobile)
+    if (navigator.share) {
+        navigator.share({
+            title: 'Quiz Access Link',
+            text: 'Access the quiz using this link:',
+            url: url
+        }).catch(() => {
+            // If share fails, show alert
+            alert(message);
+        });
+    } else {
+        alert(message);
+    }
 }
 
 // Download and Share Results
