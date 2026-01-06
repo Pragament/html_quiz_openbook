@@ -11,6 +11,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+const urlParams = new URLSearchParams(window.location.search);
+const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
 
 // State Management
 const state = {
@@ -64,12 +66,12 @@ const elements = {
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
+    checkUrlParameters();
     initAuth();
     initEventListeners();
     loadQuizzes();
     loadQuestionPapers();
     preventNavigation();
-    checkUrlParameters();
 });
 
 // Initialize Event Listeners
@@ -433,9 +435,12 @@ async function loadRound(roundNum) {
     const round = state.activeQuiz.rounds[roundNum - 1];
     
     elements.roundDisplay.textContent = `Round ${roundNum}/${state.activeQuiz.numRounds}`;
-    elements.roundIndicator.textContent = round.openBook ? 
+    /*elements.roundIndicator.textContent = round.openBook ? 
         `Round ${roundNum}: Open Book - Reference material available` : 
-        `Round ${roundNum}: Closed Book - No reference material`;
+        `Round ${roundNum}: Closed Book - No reference material`;*/
+    elements.roundIndicator.textContent = round.openBook ? 
+        `Open Book - Reference material available` : 
+        `Closed Book - No reference material`;
     
     // Fetch questions from Firebase for selected papers
     let allQuestions = [];
@@ -516,7 +521,7 @@ function loadIframe(url) {
             </div>
         </div>
         <div class="flex-grow-1 overflow-auto">
-            <iframe src="${url}" style="width: 100%; height: 100%; border: none;"></iframe>
+            <iframe src="${url}" style="width: 100%; height: 800px; border: none;"></iframe>
         </div>
     `;
 }
@@ -569,7 +574,10 @@ function navigateToQuestion(index) {
                     const opt = question[`Option ${i}`] || question[`option ${i}`];
                     if (!opt) return '';
                     const optionText = opt.optionText;
-                    const selected = roundData.answers[index] === i;
+                    selected = roundData.answers[index] === i;
+                    if (showAnswersNoSubmit && opt.correct === true) {
+                        selected = true;
+                    }
                     return `
                         <div class="option-label ${selected ? 'selected' : ''}" onclick="selectOption(${index}, ${i})">
                             <div class="option-marker">${String.fromCharCode(64 + i)}</div>
@@ -778,6 +786,10 @@ function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const quizId = urlParams.get('quiz');
     const otp = urlParams.get('otp');
+    const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
+    if (showAnswersNoSubmit) {
+        document.getElementById('submit-round-btn').style.display = 'none';
+    }
     
     if (quizId) {
         loadQuizFromUrl(quizId, otp);
@@ -785,6 +797,7 @@ function checkUrlParameters() {
 }
 
 async function loadQuizFromUrl(quizId, otp) {
+    document.getElementById('auth-section').style.display = 'none';
     try {
         console.log('🔗 Loading quiz from URL:', quizId, 'OTP:', otp);
         
