@@ -544,6 +544,15 @@ function renderQuestions() {
 
 let currentQuestionIndex = 0;
 
+function scrollQuestions(direction) {
+    const nav = document.querySelector('.question-navigation');
+    const scrollAmount = 200; // Adjust scroll distance
+    nav.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+    
+    // Update button states
+    updateNavButtons();
+}
+
 function navigateToQuestion(index) {
     const roundData = state.roundAnswers[state.currentRound];
     if (index < 0 || index >= roundData.questions.length) return;
@@ -559,11 +568,12 @@ function navigateToQuestion(index) {
                 ${[1, 2, 3, 4].map(i => {
                     const opt = question[`Option ${i}`] || question[`option ${i}`];
                     if (!opt) return '';
+                    const optionText = opt.optionText;
                     const selected = roundData.answers[index] === i;
                     return `
                         <div class="option-label ${selected ? 'selected' : ''}" onclick="selectOption(${index}, ${i})">
                             <div class="option-marker">${String.fromCharCode(64 + i)}</div>
-                            <div>${opt}</div>
+                            <div>${optionText}</div>
                         </div>
                     `;
                 }).join('')}
@@ -652,21 +662,27 @@ function generateReport() {
         if (roundData.questions) {
             roundData.questions.forEach((q, i) => {
                 const userAns = roundData.answers[i];
-                
-                // Try multiple field name variations for correct answer
-                const correctOption = q['Correct Option'] || q['correct option'] || q['CorrectOption'] || 
-                                     q.correctOption || q['Correct option'] || q['correct Option'] ||
-                                     q['Answer'] || q['answer'];
-                
-                // Parse the correct answer
+
+                // Find the correct answer by checking which option has correct: true
+                let correctOption = null;
+
+                // Check each option field (Option 1, Option 2, etc.)
+                for (let j = 1; j <= 4; j++) {
+                    const optionKey = `Option ${j}`;
+                    if (q[optionKey] && q[optionKey].correct === true) {
+                        correctOption = j;
+                        break;
+                    }
+                }
+                // Parse and compare answers
                 let correct = null;
                 if (correctOption !== undefined && correctOption !== null && correctOption !== '') {
-                    correct = parseInt(correctOption);
+                    // Ensure it's a number (already is from our loop above)
+                    correct = typeof correctOption === 'number' ? correctOption : parseInt(correctOption);
                 }
-                
+
                 // Compare user answer with correct answer
-                const isCorrect = correct !== null && !isNaN(correct) && userAns !== undefined && userAns === correct;
-                
+                const isCorrect = correct !== null && !isNaN(correct) && userAns !== undefined && userAns === correct;                
                 if (isCorrect) score++;
                 
                 details.push({ 

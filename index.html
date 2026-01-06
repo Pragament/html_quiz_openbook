@@ -145,7 +145,11 @@
                                 <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
                             </div>
                         </div>
-                        <div class="question-navigation" id="question-nav"></div>
+                        <div class="questions-nav-container">
+                            <button class="nav-btn prev-btn" onclick="scrollQuestions(-1)">‹</button>
+                            <div class="question-navigation" id="question-nav"></div>
+                            <button class="nav-btn next-btn" onclick="scrollQuestions(1)">›</button>
+                        </div>
                     </div>
                     <div class="flex-grow-1 px-3 overflow-auto">
                         <div id="questions-container"></div>
