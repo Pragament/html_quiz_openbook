@@ -23,6 +23,10 @@ body {
     min-height: 100vh;
 }
 
+.hidden {
+    display: none !important;
+}
+
 .glass-card {
     background: var(--surface-color);
     border: 1px solid #e2e8f0;

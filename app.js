@@ -433,6 +433,9 @@ async function startQuiz(quizId) {
 async function loadRound(roundNum) {
     state.currentRound = roundNum;
     const round = state.activeQuiz.rounds[roundNum - 1];
+    if (!round.openBook){
+        document.getElementById('reference-material-section').classList.add('hidden');
+    }
     
     elements.roundDisplay.textContent = `Round ${roundNum}/${state.activeQuiz.numRounds}`;
     /*elements.roundIndicator.textContent = round.openBook ? 
