@@ -11,6 +11,27 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
+
+// Google Analytics Configuration
+// Replace 'G-XXXXXXXXXX' with your actual Google Analytics Measurement ID
+function initializeGoogleAnalytics() {
+    // Initialize gtag
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    window.gtag = gtag;
+    gtag('js', new Date());
+    gtag('config', 'G-4FEYXGWVFC', {
+        'anonymize_ip': true
+    });
+}
+
+// Helper function to track events in Google Analytics
+function trackEvent(eventName, eventParams = {}) {
+    if (window.gtag) {
+        window.gtag('event', eventName, eventParams);
+        console.log('📊 GA Event tracked:', eventName, eventParams);
+    }
+}
 const urlParams = new URLSearchParams(window.location.search);
 const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
 
@@ -66,6 +87,8 @@ const elements = {
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', () => {
+    initializeGoogleAnalytics();
+    trackEvent('page_view', { 'page_title': 'Quiz Platform Home' });
     checkUrlParameters();
     initAuth();
     initEventListeners();
@@ -81,6 +104,7 @@ function initEventListeners() {
     if (quizSearchInput) {
         quizSearchInput.addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
+            trackEvent('quiz_search', { 'search_term': term, 'results_count': state.quizzes.filter(q => q.title.toLowerCase().includes(term)).length });
             const filtered = state.quizzes.filter(q => 
                 q.title.toLowerCase().includes(term)
             );
@@ -101,6 +125,7 @@ function preventNavigation() {
 
 // View Management
 function showView(view) {
+    trackEvent('view_change', { 'view_name': view });
     elements.homepage.classList.add('d-none');
     elements.quizInterface.classList.add('d-none');
     elements.reportsView.classList.add('d-none');
@@ -150,12 +175,14 @@ async function renderPdfPage(num) {
 
 elements.prevPage.addEventListener('click', () => {
     if (state.currentPdfPage > 1) {
+        trackEvent('pdf_page_prev', { 'current_page': state.currentPdfPage });
         renderPdfPage(state.currentPdfPage - 1);
     }
 });
 
 elements.nextPage.addEventListener('click', () => {
     if (state.pdfDocument && state.currentPdfPage < state.pdfDocument.numPages) {
+        trackEvent('pdf_page_next', { 'current_page': state.currentPdfPage });
         renderPdfPage(state.currentPdfPage + 1);
     }
 });
@@ -188,6 +215,10 @@ function startTimer(seconds) {
         
         if (remaining <= 0) {
             clearInterval(state.timerInterval);
+            trackEvent('time_limit_reached', { 
+                'quiz_id': state.activeQuiz ? state.activeQuiz.id : 'unknown',
+                'round_number': state.currentRound
+            });
             alert('Time is up!');
             submitQuiz();
         }
@@ -216,13 +247,17 @@ function initAuth() {
 elements.loginBtn.addEventListener('click', async () => {
     const provider = new firebase.auth.GoogleAuthProvider();
     try {
+        trackEvent('login_attempt');
         await auth.signInWithPopup(provider);
+        trackEvent('login_success');
     } catch (error) {
+        trackEvent('login_failed', { 'error': error.message });
         alert('Login failed: ' + error.message);
     }
 });
 
 elements.logoutBtn.addEventListener('click', () => {
+    trackEvent('logout');
     auth.signOut();
 });
 
@@ -314,6 +349,7 @@ async function loadQuestionPapers() {
 
 // Create Quiz
 elements.createQuizBtn.addEventListener('click', () => {
+    trackEvent('create_quiz_clicked');
     const modal = new bootstrap.Modal(document.getElementById('createQuizModal'));
     modal.show();
     updateRoundsConfig();
@@ -414,6 +450,13 @@ async function startQuiz(quizId) {
         if (!doc.exists) throw new Error('Quiz not found');
         
         state.activeQuiz = { id: quizId, ...doc.data() };
+        trackEvent('quiz_start', { 
+            'quiz_id': quizId,
+            'quiz_title': state.activeQuiz.title,
+            'num_rounds': state.activeQuiz.numRounds,
+            'num_questions': state.activeQuiz.numQuestions,
+            'has_time_limit': state.activeQuiz.timeLimitEnabled
+        });
         state.currentRound = 1;
         state.roundAnswers = {};
         state.quizInProgress = true;
@@ -426,6 +469,7 @@ async function startQuiz(quizId) {
             startTimer(state.activeQuiz.timeLimit * 60);
         }
     } catch (error) {
+        trackEvent('quiz_start_failed', { 'quiz_id': quizId, 'error': error.message });
         alert('Failed to start quiz: ' + error.message);
     }
 }
@@ -433,6 +477,11 @@ async function startQuiz(quizId) {
 async function loadRound(roundNum) {
     state.currentRound = roundNum;
     const round = state.activeQuiz.rounds[roundNum - 1];
+    trackEvent('round_load', { 
+        'quiz_id': state.activeQuiz.id,
+        'round_number': roundNum,
+        'is_open_book': round.openBook
+    });
     if (!round.openBook){
         document.getElementById('reference-material-section').classList.add('hidden');
     }
@@ -601,6 +650,12 @@ function navigateToQuestion(index) {
 
 function selectOption(qIndex, optIndex) {
     state.roundAnswers[state.currentRound].answers[qIndex] = optIndex;
+    trackEvent('option_selected', { 
+        'quiz_id': state.activeQuiz.id,
+        'round_number': state.currentRound,
+        'question_index': qIndex,
+        'option_selected': optIndex
+    });
     navigateToQuestion(qIndex);
 }
 
@@ -628,6 +683,13 @@ elements.submitRoundBtn.addEventListener('click', async () => {
         }
     }
     
+    trackEvent('round_submit', { 
+        'quiz_id': state.activeQuiz.id,
+        'round_number': state.currentRound,
+        'questions_answered': answered,
+        'total_questions': total
+    });
+    
     if (state.currentRound < state.activeQuiz.numRounds) {
         if (confirm(`Submit Round ${state.currentRound} and move to Round ${state.currentRound + 1}?`)) {
             await loadRound(state.currentRound + 1);
@@ -644,6 +706,16 @@ function submitQuiz() {
     state.quizInProgress = false;
     
     const report = generateReport();
+    const avgScore = report.rounds.reduce((sum, r) => sum + parseFloat(r.percentage || 0), 0) / report.rounds.length;
+    
+    trackEvent('quiz_submit', { 
+        'quiz_id': state.activeQuiz.id,
+        'quiz_title': state.activeQuiz.title,
+        'total_time_seconds': report.totalTime,
+        'num_rounds': report.rounds.length,
+        'average_score': avgScore.toFixed(1)
+    });
+    
     saveReport(report);
     showResults(report);
     showView('homepage');
@@ -730,6 +802,9 @@ function saveReport(report) {
 
 // View Reports
 elements.viewReportsBtn.addEventListener('click', () => {
+    trackEvent('view_reports_clicked', { 
+        'reports_count': JSON.parse(localStorage.getItem('quizReports') || '[]').length
+    });
     const reports = JSON.parse(localStorage.getItem('quizReports') || '[]');
     const list = document.getElementById('reports-list');
     
@@ -895,6 +970,7 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
         alert('Please login to view your quizzes');
         return;
     }
+    trackEvent('my_quizzes_clicked');
     
     const list = document.getElementById('my-quizzes-list');
     list.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
@@ -994,6 +1070,7 @@ async function generateOtp(quizId) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
     try {
+        trackEvent('otp_generate', { 'quiz_id': quizId });
         await db.collection('quizzes').doc(quizId).collection('otps').add({
             code: otp,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1019,7 +1096,7 @@ function copyQuizUrl(quizId) {
 
 function shareOtpUrl(quizId, otp) {
     const url = `${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`;
-    
+    trackEvent('otp_share', { 'quiz_id': quizId });
     console.log('📤 Sharing OTP URL:', url);
     
     // Try to copy to clipboard
@@ -1154,6 +1231,7 @@ function showResults(report) {
 // Download Result as Image
 document.getElementById('download-result-btn').addEventListener('click', async () => {
     if (!currentReport) return;
+    trackEvent('result_download', { 'quiz_title': currentReport.quizTitle });
     
     try {
         // Create canvas
@@ -1246,6 +1324,7 @@ document.getElementById('download-result-btn').addEventListener('click', async (
 // Share Result
 document.getElementById('share-result-btn').addEventListener('click', async () => {
     if (!currentReport) return;
+    trackEvent('result_share', { 'quiz_title': currentReport.quizTitle });
     
     const totalMinutes = Math.floor((currentReport.totalTime || 0) / 60);
     const totalSeconds = (currentReport.totalTime || 0) % 60;
@@ -1363,6 +1442,14 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
     };
 
     try {
+        trackEvent('quiz_create_save', { 
+            'quiz_title': title,
+            'num_rounds': numRounds,
+            'num_questions': numQuestions,
+            'is_private': isPrivate,
+            'is_random': randomQuestions,
+            'has_time_limit': timeLimitEnabled
+        });
         const docRef = await db.collection('quizzes').add(quizData);
         
         bootstrap.Modal.getInstance(document.getElementById('createQuizModal')).hide();
