@@ -12,7 +12,7 @@
 </head>
 <body>
     <!-- Auth Section -->
-    <div id="auth-section" class="position-fixed top-0 end-0 p-1" style="z-index: 1000; transform: scale(0.85); transform-origin: top right;">
+    <div id="auth-section" class="position-fixed top-0 end-0 p-1 d-none" style="z-index: 1000; transform: scale(0.85); transform-origin: top right;">
         <div id="user-info" class="d-none">
             <div class="d-flex align-items-center gap-2">
                 <span id="user-name" class="text-dark fw-medium" style="font-size: 0.9rem;"></span>
@@ -32,6 +32,12 @@
                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                     <input type="text" id="quiz-search" class="form-control" placeholder="Search quizzes...">
                 </div>
+            </div>
+        </div>
+
+        <div class="row mb-3">
+            <div class="col-12" id="class-buttons-container">
+                <!-- Class buttons will be rendered here via JS -->
             </div>
         </div>
 
