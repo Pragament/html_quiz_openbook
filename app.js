@@ -629,8 +629,21 @@ async function loadRound(roundNum) {
         'round_number': roundNum,
         'is_open_book': round.openBook
     });
+    const refSection = document.getElementById('reference-material-section');
+    const questionsCol = document.getElementById('questions-section');
+    
     if (!round.openBook) {
-        document.getElementById('reference-material-section').classList.add('hidden');
+        if (refSection) refSection.classList.add('d-none', 'hidden');
+        if (questionsCol) {
+            questionsCol.classList.remove('col-lg-6');
+            questionsCol.classList.add('col-lg-12');
+        }
+    } else {
+        if (refSection) refSection.classList.remove('d-none', 'hidden');
+        if (questionsCol) {
+            questionsCol.classList.remove('col-lg-12');
+            questionsCol.classList.add('col-lg-6');
+        }
     }
 
     elements.roundDisplay.textContent = `Round ${roundNum}/${state.activeQuiz.numRounds}`;
