@@ -304,36 +304,40 @@ function initAuth() {
     auth.onAuthStateChanged(user => {
         state.currentUser = user;
         if (user) {
-            elements.loginBtn.classList.add('d-none');
-            elements.userInfo.classList.remove('d-none');
-            elements.userName.textContent = user.displayName || user.email;
-            elements.createQuizBtn.classList.remove('d-none');
-            elements.myQuizzesBtn.classList.remove('d-none');
+            if (elements.loginBtn) elements.loginBtn.classList.add('d-none');
+            if (elements.userInfo) elements.userInfo.classList.remove('d-none');
+            if (elements.userName) elements.userName.textContent = user.displayName || user.email;
+            if (elements.createQuizBtn) elements.createQuizBtn.classList.remove('d-none');
+            if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.remove('d-none');
         } else {
-            elements.loginBtn.classList.remove('d-none');
-            elements.userInfo.classList.add('d-none');
-            elements.createQuizBtn.classList.add('d-none');
-            elements.myQuizzesBtn.classList.add('d-none');
+            if (elements.loginBtn) elements.loginBtn.classList.remove('d-none');
+            if (elements.userInfo) elements.userInfo.classList.add('d-none');
+            if (elements.createQuizBtn) elements.createQuizBtn.classList.add('d-none');
+            if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.add('d-none');
         }
     });
 }
 
-elements.loginBtn.addEventListener('click', async () => {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    try {
-        trackEvent('login_attempt');
-        await auth.signInWithPopup(provider);
-        trackEvent('login_success');
-    } catch (error) {
-        trackEvent('login_failed', { 'error': error.message });
-        alert('Login failed: ' + error.message);
-    }
-});
+if (elements.loginBtn) {
+    elements.loginBtn.addEventListener('click', async () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+            trackEvent('login_attempt');
+            await auth.signInWithPopup(provider);
+            trackEvent('login_success');
+        } catch (error) {
+            trackEvent('login_failed', { 'error': error.message });
+            alert('Login failed: ' + error.message);
+        }
+    });
+}
 
-elements.logoutBtn.addEventListener('click', () => {
-    trackEvent('logout');
-    auth.signOut();
-});
+if (elements.logoutBtn) {
+    elements.logoutBtn.addEventListener('click', () => {
+        trackEvent('logout');
+        auth.signOut();
+    });
+}
 
 // Load Quizzes
 async function loadQuizzes() {
