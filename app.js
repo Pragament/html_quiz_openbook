@@ -17,7 +17,7 @@ const auth = firebase.auth();
 function initializeGoogleAnalytics() {
     // Initialize gtag
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag() { dataLayer.push(arguments); }
     window.gtag = gtag;
     gtag('js', new Date());
     gtag('config', 'G-4FEYXGWVFC', {
@@ -97,18 +97,92 @@ document.addEventListener('DOMContentLoaded', () => {
     preventNavigation();
 });
 
+window.filterQuizzes = () => {
+    const quizSearchInput = document.getElementById('quiz-search');
+    const classFilterInput = document.getElementById('homepage-class-filter');
+    const classButtonsContainer = document.getElementById('class-buttons-container');
+
+    const term = quizSearchInput ? quizSearchInput.value.toLowerCase() : '';
+    let selectedClass = classFilterInput ? classFilterInput.value : '';
+    
+    // Check for active class button in embed.html
+    if (classButtonsContainer) {
+        const activeClassBtn = document.querySelector('.class-filter-btn.active');
+        if (activeClassBtn && activeClassBtn.dataset.class !== undefined) {
+            selectedClass = activeClassBtn.dataset.class;
+        } else {
+            // If in embed.html and no class is selected, show nothing
+            renderQuizzes([]);
+            return;
+        }
+    }
+    
+    const filtered = state.quizzes.filter(q => {
+        const matchesSearch = q.title.toLowerCase().includes(term);
+        const matchesClass = !selectedClass || (q.targetClass && q.targetClass.toString().trim() === selectedClass);
+        return matchesSearch && matchesClass;
+    });
+    renderQuizzes(filtered);
+};
+
 // Initialize Event Listeners
 function initEventListeners() {
-    // Quiz search functionality
     const quizSearchInput = document.getElementById('quiz-search');
+    const classFilterInput = document.getElementById('homepage-class-filter');
+
     if (quizSearchInput) {
-        quizSearchInput.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            trackEvent('quiz_search', { 'search_term': term, 'results_count': state.quizzes.filter(q => q.title.toLowerCase().includes(term)).length });
-            const filtered = state.quizzes.filter(q => 
-                q.title.toLowerCase().includes(term)
-            );
-            renderQuizzes(filtered);
+        quizSearchInput.addEventListener('input', () => {
+            const term = quizSearchInput.value.toLowerCase();
+            trackEvent('quiz_search', { 'search_term': term });
+            filterQuizzes();
+        });
+    }
+    
+    if (classFilterInput) {
+        classFilterInput.addEventListener('change', () => {
+            trackEvent('quiz_class_filter', { 'class': classFilterInput.value });
+            filterQuizzes();
+        });
+    }
+    
+    // Class buttons delegation for embed.html
+    const classButtonsContainer = document.getElementById('class-buttons-container');
+    if (classButtonsContainer) {
+        classButtonsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('class-filter-btn') || e.target.closest('.class-filter-btn')) {
+                const btn = e.target.classList.contains('class-filter-btn') ? e.target : e.target.closest('.class-filter-btn');
+                
+                // If it's a reset action (clicking the already active button could act as reset, or we just keep it simple)
+                if (btn.classList.contains('active')) {
+                    // Reset: show all buttons
+                    document.querySelectorAll('.class-filter-btn').forEach(b => {
+                        b.classList.remove('active', 'btn-primary');
+                        b.classList.add('btn-outline-primary');
+                        b.style.display = 'block'; // Show them all again
+                        if (b.innerHTML.includes('bi-arrow-left')) {
+                            b.innerHTML = b.innerHTML.replace('<i class="bi bi-arrow-left me-2"></i> ', '');
+                        }
+                    });
+                    trackEvent('quiz_class_button_reset');
+                    filterQuizzes();
+                } else {
+                    // Make active and hide others
+                    document.querySelectorAll('.class-filter-btn').forEach(b => {
+                        b.classList.remove('active', 'btn-primary');
+                        b.classList.add('btn-outline-primary');
+                        if (b !== btn) {
+                            b.style.display = 'none'; // Hide unselected
+                        }
+                    });
+                    
+                    btn.classList.add('active', 'btn-primary');
+                    btn.classList.remove('btn-outline-primary');
+                    btn.innerHTML = `<i class="bi bi-arrow-left me-2"></i> ${btn.textContent}`; // Add back arrow to indicate they can click to go back
+                    
+                    trackEvent('quiz_class_button', { 'class': btn.dataset.class });
+                    filterQuizzes();
+                }
+            }
         });
     }
 }
@@ -130,7 +204,7 @@ function showView(view) {
     elements.quizInterface.classList.add('d-none');
     elements.reportsView.classList.add('d-none');
     elements.myQuizzesView.classList.add('d-none');
-    
+
     if (view === 'homepage') {
         elements.homepage.classList.remove('d-none');
     } else if (view === 'quiz') {
@@ -156,15 +230,15 @@ async function loadPdf(url) {
 
 async function renderPdfPage(num) {
     if (!state.pdfDocument) return;
-    
+
     try {
         const page = await state.pdfDocument.getPage(num);
         const viewport = page.getViewport({ scale: 1.5 });
         elements.pdfCanvas.width = viewport.width;
         elements.pdfCanvas.height = viewport.height;
-        await page.render({ 
-            canvasContext: elements.pdfCanvas.getContext('2d'), 
-            viewport 
+        await page.render({
+            canvasContext: elements.pdfCanvas.getContext('2d'),
+            viewport
         }).promise;
         state.currentPdfPage = num;
         elements.pageNum.textContent = num;
@@ -200,22 +274,22 @@ function shuffleArray(array) {
 // Timer Function
 function startTimer(seconds) {
     let remaining = seconds;
-    
+
     const updateTimer = () => {
         const m = Math.floor(remaining / 60);
         const s = remaining % 60;
         elements.timerDisplay.textContent = `${m}:${s.toString().padStart(2, '0')}`;
     };
-    
+
     updateTimer(); // Initial display
-    
+
     state.timerInterval = setInterval(() => {
         remaining--;
         updateTimer();
-        
+
         if (remaining <= 0) {
             clearInterval(state.timerInterval);
-            trackEvent('time_limit_reached', { 
+            trackEvent('time_limit_reached', {
                 'quiz_id': state.activeQuiz ? state.activeQuiz.id : 'unknown',
                 'round_number': state.currentRound
             });
@@ -271,7 +345,7 @@ async function loadQuizzes() {
     try {
         const snapshot = await db.collection('quizzes').where('isPrivate', '==', false).get();
         state.quizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderQuizzes(state.quizzes);
+        window.filterQuizzes();
     } catch (error) {
         // Fallback: load all quizzes if query fails (for backward compatibility)
         try {
@@ -279,7 +353,7 @@ async function loadQuizzes() {
             state.quizzes = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(q => !q.isPrivate);
-            renderQuizzes(state.quizzes);
+            window.filterQuizzes();
         } catch (err) {
             elements.quizzesList.innerHTML = '<div class="col-12 text-center text-danger">Failed to load quizzes</div>';
         }
@@ -291,11 +365,11 @@ function renderQuizzes(quizzes) {
         elements.quizzesList.innerHTML = '<div class="col-12 text-center text-muted">No quizzes available. Create one to get started!</div>';
         return;
     }
-    
+
     elements.quizzesList.innerHTML = quizzes.map(quiz => {
         const createdBy = quiz.createdByName || 'Unknown';
         const createdAt = quiz.createdAt ? new Date(quiz.createdAt.toDate()).toLocaleDateString() : '';
-        
+
         return `
             <div class="col-md-4">
                 <div class="card h-100 quiz-card" onclick="startQuiz('${quiz.id}')">
@@ -304,6 +378,7 @@ function renderQuizzes(quizzes) {
                         <div class="mb-2">
                             <span class="badge bg-primary">${quiz.numRounds} Round${quiz.numRounds > 1 ? 's' : ''}</span>
                             <span class="badge bg-info">${quiz.numQuestions} Questions</span>
+                            ${quiz.targetClass ? `<span class="badge bg-secondary">Class: ${quiz.targetClass}</span>` : ''}
                         </div>
                         ${quiz.timeLimitEnabled ? `<div class="mb-2"><span class="badge bg-warning text-dark">⏱ ${quiz.timeLimit} min</span></div>` : ''}
                         ${quiz.randomQuestions ? '<div class="mb-2"><span class="badge bg-secondary">🔀 Random</span></div>' : ''}
@@ -325,9 +400,9 @@ async function loadQuestionPapers() {
             db.collection('questionpapers').get().catch(() => ({ docs: [] })),
             db.collection('QuestionPapers').get().catch(() => ({ docs: [] }))
         ]);
-        
+
         const papers = new Map();
-        
+
         [...lower.docs, ...upper.docs].forEach(doc => {
             if (!papers.has(doc.id)) {
                 const data = doc.data();
@@ -344,10 +419,61 @@ async function loadQuestionPapers() {
                 });
             }
         });
-        
+
         state.questionPapers = Array.from(papers.values());
+        populateClassDropdowns();
     } catch (error) {
         // Silent error handling
+    }
+}
+
+function getUniqueClasses() {
+    // Generate classes 1 to 10
+    return Array.from({length: 10}, (_, i) => (i + 1).toString());
+}
+
+function populateClassDropdowns() {
+    const classes = getUniqueClasses();
+    
+    // Homepage filter
+    const hpFilter = document.getElementById('homepage-class-filter');
+    if (hpFilter) {
+        const currentValue = hpFilter.value;
+        hpFilter.innerHTML = '<option value="">All Classes</option>' + 
+            classes.map(c => `<option value="${c}">Class ${c}</option>`).join('');
+        hpFilter.value = currentValue;
+    }
+    
+    // Modal target class
+    const targetSelect = document.getElementById('quiz-target-class');
+    if (targetSelect) {
+        const currentValue = targetSelect.value;
+        targetSelect.innerHTML = '<option value="">Select a Class</option>' + 
+            classes.map(c => `<option value="${c}">Class ${c}</option>`).join('');
+        if (currentValue && classes.includes(currentValue)) {
+            targetSelect.value = currentValue;
+        }
+    }
+    
+    // Embed.html class buttons
+    const classButtonsContainer = document.getElementById('class-buttons-container');
+    if (classButtonsContainer) {
+        classButtonsContainer.innerHTML = `
+            <div class="d-flex flex-wrap gap-3 justify-content-center">
+                <button class="btn btn-lg btn-outline-primary class-filter-btn px-4 py-3 fw-bold shadow-sm" data-class="">All Classes</button>
+                ${classes.map(c => `<button class="btn btn-lg btn-outline-primary class-filter-btn px-4 py-3 fw-bold shadow-sm" data-class="${c}">Class ${c}</button>`).join('')}
+            </div>
+        `;
+
+        // Automatically select the class if 'grade' parameter is in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlGrade = urlParams.get('grade');
+        if (urlGrade) {
+            setTimeout(() => {
+                const btn = document.querySelector(`.class-filter-btn[data-class="${urlGrade}"]`);
+                if (btn) btn.click();
+            }, 10);
+        }
     }
 }
 
@@ -359,23 +485,44 @@ elements.createQuizBtn.addEventListener('click', () => {
     updateRoundsConfig();
 });
 
-document.getElementById('num-rounds').addEventListener('change', updateRoundsConfig);
-document.getElementById('time-limit-enabled').addEventListener('change', (e) => {
-    document.getElementById('time-limit-input').style.display = e.target.checked ? 'block' : 'none';
-});
+const numRoundsEl = document.getElementById('num-rounds');
+if (numRoundsEl) numRoundsEl.addEventListener('change', updateRoundsConfig);
+
+const targetClassEl = document.getElementById('quiz-target-class');
+if (targetClassEl) targetClassEl.addEventListener('change', updateRoundsConfig);
+
+const timeLimitEnabledEl = document.getElementById('time-limit-enabled');
+if (timeLimitEnabledEl) {
+    timeLimitEnabledEl.addEventListener('change', (e) => {
+        const timeLimitInput = document.getElementById('time-limit-input');
+        if (timeLimitInput) {
+            timeLimitInput.style.display = e.target.checked ? 'block' : 'none';
+        }
+    });
+}
 
 function updateRoundsConfig() {
-    const numRounds = parseInt(document.getElementById('num-rounds').value);
+    const numRoundsEl = document.getElementById('num-rounds');
+    const numRounds = numRoundsEl ? parseInt(numRoundsEl.value) : 1;
     const container = document.getElementById('rounds-config');
-    container.innerHTML = '';
+    const targetClassEl = document.getElementById('quiz-target-class');
+    const targetClass = targetClassEl ? targetClassEl.value : '';
     
+    if (container) container.innerHTML = '';
+
     for (let i = 1; i <= numRounds; i++) {
-        const paperOptions = state.questionPapers.map(p => {
+        let availablePapers = state.questionPapers;
+
+        let paperOptions = availablePapers.map(p => {
             const info = p.class ? ` (Class: ${p.class})` : '';
             const qCount = ` - ${p.questionCount} questions`;
             return `<option value="${p.id}">${p.title}${info}${qCount}</option>`;
         }).join('');
         
+        if (availablePapers.length === 0) {
+            paperOptions = `<option value="" disabled>No question papers found.</option>`;
+        }
+
         // Round 1 can be open book, Round 2 is always closed book
         const openBookOption = i === 1 ? `
             <div class="form-check mb-2">
@@ -406,7 +553,7 @@ function updateRoundsConfig() {
                 <i class="bi bi-book"></i> <strong>Closed Book Round</strong> - No reference material will be shown
             </div>
         `;
-        
+
         container.innerHTML += `
             <div class="mb-3 border p-3 rounded">
                 <h6>Round ${i} ${i === 2 ? '📕' : '📖'}</h6>
@@ -421,7 +568,7 @@ function updateRoundsConfig() {
             </div>
         `;
     }
-    
+
     // Add event listeners for reference type toggle after DOM is updated
     setTimeout(() => {
         for (let i = 1; i <= numRounds; i++) {
@@ -430,11 +577,11 @@ function updateRoundsConfig() {
                 refTypeSelect.addEventListener('change', (e) => {
                     const pdfUrlDiv = document.getElementById(`pdf-url-${i}`);
                     const webpageDiv = document.getElementById(`webpage-url-${i}`);
-                    
+
                     // Hide all
                     pdfUrlDiv.classList.add('d-none');
                     webpageDiv.classList.add('d-none');
-                    
+
                     // Show selected
                     if (e.target.value === 'pdf-url') {
                         pdfUrlDiv.classList.remove('d-none');
@@ -452,9 +599,9 @@ async function startQuiz(quizId) {
     try {
         const doc = await db.collection('quizzes').doc(quizId).get();
         if (!doc.exists) throw new Error('Quiz not found');
-        
+
         state.activeQuiz = { id: quizId, ...doc.data() };
-        trackEvent('quiz_start', { 
+        trackEvent('quiz_start', {
             'quiz_id': quizId,
             'quiz_title': state.activeQuiz.title,
             'num_rounds': state.activeQuiz.numRounds,
@@ -465,10 +612,10 @@ async function startQuiz(quizId) {
         state.roundAnswers = {};
         state.quizInProgress = true;
         state.quizStartTime = Date.now();
-        
+
         await loadRound(1);
         showView('quiz');
-        
+
         if (state.activeQuiz.timeLimitEnabled) {
             startTimer(state.activeQuiz.timeLimit * 60);
         }
@@ -481,27 +628,27 @@ async function startQuiz(quizId) {
 async function loadRound(roundNum) {
     state.currentRound = roundNum;
     const round = state.activeQuiz.rounds[roundNum - 1];
-    trackEvent('round_load', { 
+    trackEvent('round_load', {
         'quiz_id': state.activeQuiz.id,
         'round_number': roundNum,
         'is_open_book': round.openBook
     });
-    if (!round.openBook){
+    if (!round.openBook) {
         document.getElementById('reference-material-section').classList.add('hidden');
     }
-    
+
     elements.roundDisplay.textContent = `Round ${roundNum}/${state.activeQuiz.numRounds}`;
     /*elements.roundIndicator.textContent = round.openBook ? 
         `Round ${roundNum}: Open Book - Reference material available` : 
         `Round ${roundNum}: Closed Book - No reference material`;*/
-    elements.roundIndicator.textContent = round.openBook ? 
-        `Open Book - Reference material available` : 
+    elements.roundIndicator.textContent = round.openBook ?
+        `Open Book - Reference material available` :
         `Closed Book - No reference material`;
-    
+
     // Fetch questions from Firebase for selected papers
     let allQuestions = [];
     let pdfUrl = 'textbook.pdf';
-    
+
     for (const paperId of round.papers) {
         try {
             // Try both collections
@@ -509,12 +656,12 @@ async function loadRound(roundNum) {
             if (!paperDoc.exists) {
                 paperDoc = await db.collection('QuestionPapers').doc(paperId).get();
             }
-            
+
             if (paperDoc.exists) {
                 const data = paperDoc.data();
                 const questions = data.questions || data.Questions || [];
                 allQuestions.push(...questions);
-                
+
                 // Get PDF URL from first paper (fallback)
                 if (allQuestions.length === questions.length && !round.referenceConfig) {
                     pdfUrl = data.pdfUrl || data.pdf || 'textbook.pdf';
@@ -524,30 +671,30 @@ async function loadRound(roundNum) {
             // Silent error handling
         }
     }
-    
+
     if (allQuestions.length === 0) {
         alert('No questions found in selected papers. Please check the quiz configuration.');
         showView('homepage');
         return;
     }
-    
+
     // Randomize if enabled
     if (state.activeQuiz.randomQuestions) {
         allQuestions = shuffleArray(allQuestions);
     }
-    
+
     // Limit to configured number of questions
     const selectedQuestions = allQuestions.slice(0, state.activeQuiz.numQuestions);
-    
+
     state.roundAnswers[roundNum] = {
         questions: selectedQuestions,
         answers: {},
         startTime: Date.now(),
         paperIds: round.papers
     };
-    
+
     renderQuestions();
-    
+
     // Load reference material if open book
     if (round.openBook) {
         if (round.referenceConfig) {
@@ -597,7 +744,7 @@ function clearReferenceArea() {
 
 function renderQuestions() {
     const roundData = state.roundAnswers[state.currentRound];
-    elements.questionNav.innerHTML = roundData.questions.map((_, i) => 
+    elements.questionNav.innerHTML = roundData.questions.map((_, i) =>
         `<div class="question-number" onclick="navigateToQuestion(${i})">${i + 1}</div>`
     ).join('');
     navigateToQuestion(0);
@@ -609,7 +756,7 @@ function scrollQuestions(direction) {
     const nav = document.querySelector('.question-navigation');
     const scrollAmount = 200; // Adjust scroll distance
     nav.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
-    
+
     // Update button states
     updateNavButtons();
 }
@@ -617,34 +764,34 @@ function scrollQuestions(direction) {
 function navigateToQuestion(index) {
     const roundData = state.roundAnswers[state.currentRound];
     if (index < 0 || index >= roundData.questions.length) return;
-    
+
     currentQuestionIndex = index;
     const question = roundData.questions[index];
-    
+
     elements.questionsContainer.innerHTML = `
         <div class="question-card">
             <h5>Question ${index + 1}</h5>
             <p class="fs-5">${question.Question || question.question}</p>
             <div class="options">
                 ${[1, 2, 3, 4].map(i => {
-                    const opt = question[`Option ${i}`] || question[`option ${i}`];
-                    if (!opt) return '';
-                    const optionText = opt.optionText;
-                    selected = roundData.answers[index] === i;
-                    if (showAnswersNoSubmit && opt.correct === true) {
-                        selected = true;
-                    }
-                    return `
+        const opt = question[`Option ${i}`] || question[`option ${i}`];
+        if (!opt) return '';
+        const optionText = opt.optionText;
+        selected = roundData.answers[index] === i;
+        if (showAnswersNoSubmit && opt.correct === true) {
+            selected = true;
+        }
+        return `
                         <div class="option-label ${selected ? 'selected' : ''}" onclick="selectOption(${index}, ${i})">
                             <div class="option-marker">${String.fromCharCode(64 + i)}</div>
                             <div>${optionText}</div>
                         </div>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
         </div>
     `;
-    
+
     updateProgress();
     document.querySelectorAll('.question-number').forEach((el, i) => {
         el.classList.toggle('active', i === index);
@@ -654,7 +801,7 @@ function navigateToQuestion(index) {
 
 function selectOption(qIndex, optIndex) {
     state.roundAnswers[state.currentRound].answers[qIndex] = optIndex;
-    trackEvent('option_selected', { 
+    trackEvent('option_selected', {
         'quiz_id': state.activeQuiz.id,
         'round_number': state.currentRound,
         'question_index': qIndex,
@@ -679,21 +826,21 @@ elements.submitRoundBtn.addEventListener('click', async () => {
     const roundData = state.roundAnswers[state.currentRound];
     const answered = Object.keys(roundData.answers).length;
     const total = roundData.questions.length;
-    
+
     if (answered < total) {
         const unanswered = total - answered;
         if (!confirm(`You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway?`)) {
             return;
         }
     }
-    
-    trackEvent('round_submit', { 
+
+    trackEvent('round_submit', {
         'quiz_id': state.activeQuiz.id,
         'round_number': state.currentRound,
         'questions_answered': answered,
         'total_questions': total
     });
-    
+
     if (state.currentRound < state.activeQuiz.numRounds) {
         if (confirm(`Submit Round ${state.currentRound} and move to Round ${state.currentRound + 1}?`)) {
             await loadRound(state.currentRound + 1);
@@ -708,18 +855,18 @@ elements.submitRoundBtn.addEventListener('click', async () => {
 function submitQuiz() {
     clearInterval(state.timerInterval);
     state.quizInProgress = false;
-    
+
     const report = generateReport();
     const avgScore = report.rounds.reduce((sum, r) => sum + parseFloat(r.percentage || 0), 0) / report.rounds.length;
-    
-    trackEvent('quiz_submit', { 
+
+    trackEvent('quiz_submit', {
         'quiz_id': state.activeQuiz.id,
         'quiz_title': state.activeQuiz.title,
         'total_time_seconds': report.totalTime,
         'num_rounds': report.rounds.length,
         'average_score': avgScore.toFixed(1)
     });
-    
+
     saveReport(report);
     showResults(report);
     showView('homepage');
@@ -727,7 +874,7 @@ function submitQuiz() {
 
 function generateReport() {
     const totalTime = state.quizStartTime ? Math.floor((Date.now() - state.quizStartTime) / 1000) : 0;
-    
+
     const report = {
         quizId: state.activeQuiz.id,
         quizTitle: state.activeQuiz.title,
@@ -735,17 +882,17 @@ function generateReport() {
         totalTime: totalTime,
         rounds: []
     };
-    
+
     for (let r = 1; r <= state.activeQuiz.numRounds; r++) {
         const roundData = state.roundAnswers[r];
         if (!roundData) {
             continue;
         }
-        
+
         let score = 0;
         const details = [];
         const totalQuestions = roundData.questions ? roundData.questions.length : 0;
-        
+
         if (roundData.questions) {
             roundData.questions.forEach((q, i) => {
                 const userAns = roundData.answers[i];
@@ -769,21 +916,21 @@ function generateReport() {
                 }
 
                 // Compare user answer with correct answer
-                const isCorrect = correct !== null && !isNaN(correct) && userAns !== undefined && userAns === correct;                
+                const isCorrect = correct !== null && !isNaN(correct) && userAns !== undefined && userAns === correct;
                 if (isCorrect) score++;
-                
-                details.push({ 
+
+                details.push({
                     question: q.Question || q.question || 'Question text not available',
                     userAns: userAns !== undefined ? userAns : 'Not answered',
                     correct: correct,
-                    isCorrect 
+                    isCorrect
                 });
             });
         }
-        
+
         const roundConfig = state.activeQuiz.rounds[r - 1];
         const percentage = totalQuestions > 0 ? ((score / totalQuestions) * 100) : 0;
-        
+
         report.rounds.push({
             round: r,
             score: score,
@@ -794,7 +941,7 @@ function generateReport() {
             details
         });
     }
-    
+
     return report;
 }
 
@@ -806,27 +953,27 @@ function saveReport(report) {
 
 // View Reports
 elements.viewReportsBtn.addEventListener('click', () => {
-    trackEvent('view_reports_clicked', { 
+    trackEvent('view_reports_clicked', {
         'reports_count': JSON.parse(localStorage.getItem('quizReports') || '[]').length
     });
     const reports = JSON.parse(localStorage.getItem('quizReports') || '[]');
     const list = document.getElementById('reports-list');
-    
+
     if (reports.length === 0) {
         list.innerHTML = '<p class="text-muted">No reports available. Complete a quiz to see your progress reports here.</p>';
     } else {
         // Sort by date, newest first
         const sortedReports = [...reports].sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
-        
+
         list.innerHTML = sortedReports.map((r, i) => {
             const totalMinutes = Math.floor((r.totalTime || 0) / 60);
             const totalSeconds = (r.totalTime || 0) % 60;
             const avgScore = r.rounds.reduce((sum, round) => sum + parseFloat(round.percentage || 0), 0) / r.rounds.length;
             const gradeColor = avgScore >= 70 ? 'success' : avgScore >= 50 ? 'warning' : 'danger';
-            
+
             // Store the report data directly in the button's data attribute
             const reportJson = encodeURIComponent(JSON.stringify(r));
-            
+
             return `
                 <div class="card mb-3 border-${gradeColor}">
                     <div class="card-body">
@@ -851,7 +998,7 @@ elements.viewReportsBtn.addEventListener('click', () => {
             `;
         }).join('');
     }
-    
+
     showView('reports');
 });
 
@@ -872,7 +1019,7 @@ function checkUrlParameters() {
     if (showAnswersNoSubmit) {
         document.getElementById('submit-round-btn').style.display = 'none';
     }
-    
+
     if (quizId) {
         loadQuizFromUrl(quizId, otp);
     }
@@ -882,28 +1029,28 @@ async function loadQuizFromUrl(quizId, otp) {
     document.getElementById('auth-section').style.display = 'none';
     try {
         console.log('🔗 Loading quiz from URL:', quizId, 'OTP:', otp);
-        
+
         const doc = await db.collection('quizzes').doc(quizId).get();
         if (!doc.exists) {
             console.error('❌ Quiz not found:', quizId);
             alert('Quiz not found');
             return;
         }
-        
+
         const quizData = doc.data();
         console.log('📋 Quiz data:', quizData);
-        
+
         // Check if quiz is private
         if (quizData.isPrivate) {
             console.log('🔒 Quiz is private, checking OTP...');
-            
+
             if (!otp) {
                 console.log('⚠️ No OTP in URL, showing OTP modal');
                 // Show OTP modal only if no OTP in URL
                 showOtpModal(quizId);
                 return;
             }
-            
+
             // OTP is in URL, verify it directly
             console.log('🔑 OTP found in URL, verifying:', otp);
             const otpValid = await verifyOtp(quizId, otp);
@@ -916,7 +1063,7 @@ async function loadQuizFromUrl(quizId, otp) {
         } else {
             console.log('🌐 Quiz is public, no OTP required');
         }
-        
+
         // Start quiz
         console.log('🚀 Starting quiz...');
         startQuiz(quizId);
@@ -929,14 +1076,14 @@ async function loadQuizFromUrl(quizId, otp) {
 function showOtpModal(quizId) {
     const modal = new bootstrap.Modal(document.getElementById('otpModal'));
     modal.show();
-    
+
     document.getElementById('verify-otp-btn').onclick = async () => {
         const otp = document.getElementById('otp-input').value.trim();
         if (!otp) {
             alert('Please enter OTP');
             return;
         }
-        
+
         const valid = await verifyOtp(quizId, otp);
         if (valid) {
             modal.hide();
@@ -953,15 +1100,15 @@ async function verifyOtp(quizId, otp) {
             .where('code', '==', otp)
             .where('used', '==', false)
             .get();
-        
+
         if (snapshot.empty) {
             return false;
         }
-        
+
         // Mark OTP as used
         const otpDoc = snapshot.docs[0];
         await otpDoc.ref.update({ used: true, usedAt: firebase.firestore.FieldValue.serverTimestamp() });
-        
+
         return true;
     } catch (error) {
         return false;
@@ -975,30 +1122,30 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
         return;
     }
     trackEvent('my_quizzes_clicked');
-    
+
     const list = document.getElementById('my-quizzes-list');
     list.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
-    
+
     try {
         const snapshot = await db.collection('quizzes')
             .where('createdBy', '==', state.currentUser.uid)
             .get();
-        
+
         const myQuizzes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
+
         if (myQuizzes.length === 0) {
             list.innerHTML = '<p class="text-muted">You haven\'t created any quizzes yet.</p>';
         } else {
             list.innerHTML = await Promise.all(myQuizzes.map(async quiz => {
                 const createdAt = quiz.createdAt ? new Date(quiz.createdAt.toDate()).toLocaleDateString() : '';
                 const quizUrl = `${window.location.origin}${window.location.pathname}?quiz=${quiz.id}`;
-                
+
                 let otpSection = '';
                 if (quiz.isPrivate) {
                     // Load OTPs for this quiz
                     const otpSnapshot = await db.collection('quizzes').doc(quiz.id).collection('otps').get();
                     const otps = otpSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    
+
                     const otpList = otps.length > 0 ? otps.map(otp => `
                         <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded bg-white">
                             <div class="d-flex align-items-center">
@@ -1014,7 +1161,7 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
                             ` : ''}
                         </div>
                     `).join('') : '<small class="text-muted">No OTPs generated yet. Click "Generate OTP" to create one.</small>';
-                    
+
                     otpSection = `
                         <div class="mt-3 p-3 bg-light rounded border">
                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -1029,7 +1176,7 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
                         </div>
                     `;
                 }
-                
+
                 return `
                     <div class="card mb-3">
                         <div class="card-body">
@@ -1056,7 +1203,7 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
                 `;
             })).then(items => items.join(''));
         }
-        
+
         showView('my-quizzes');
     } catch (error) {
         list.innerHTML = '<p class="text-danger">Failed to load quizzes: ' + error.message + '</p>';
@@ -1069,10 +1216,10 @@ async function generateOtp(quizId) {
     if (!state.currentUser) {
         return;
     }
-    
+
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     try {
         trackEvent('otp_generate', { 'quiz_id': quizId });
         await db.collection('quizzes').doc(quizId).collection('otps').add({
@@ -1081,9 +1228,9 @@ async function generateOtp(quizId) {
             createdBy: state.currentUser.uid,
             used: false
         });
-        
+
         alert(`OTP Generated: ${otp}\n\nShare this URL:\n${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`);
-        
+
         // Refresh the quiz list
         elements.myQuizzesBtn.click();
     } catch (error) {
@@ -1102,7 +1249,7 @@ function shareOtpUrl(quizId, otp) {
     const url = `${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`;
     trackEvent('otp_share', { 'quiz_id': quizId });
     console.log('📤 Sharing OTP URL:', url);
-    
+
     // Try to copy to clipboard
     if (navigator.clipboard) {
         navigator.clipboard.writeText(url).then(() => {
@@ -1118,7 +1265,7 @@ function shareOtpUrl(quizId, otp) {
 
 function showUrlDialog(url) {
     const message = `Share this URL with students:\n\n${url}`;
-    
+
     // Try Web Share API (mobile)
     if (navigator.share) {
         navigator.share({
@@ -1142,7 +1289,7 @@ function showResults(report) {
     const totalTime = report.totalTime || 0;
     const totalMinutes = Math.floor(totalTime / 60);
     const totalSeconds = totalTime % 60;
-    
+
     let html = `
         <div class="text-center mb-4" id="result-summary">
             <h4 class="fw-bold">${report.quizTitle}</h4>
@@ -1150,18 +1297,18 @@ function showResults(report) {
             <p class="text-muted">Total Time: ${totalMinutes}m ${totalSeconds}s</p>
         </div>
     `;
-    
+
     report.rounds.forEach(r => {
         const percentage = parseFloat(r.percentage) || 0;
         const grade = percentage >= 80 ? 'Excellent' : percentage >= 60 ? 'Good' : percentage >= 40 ? 'Fair' : 'Needs Improvement';
         const gradeColor = percentage >= 80 ? 'success' : percentage >= 60 ? 'info' : percentage >= 40 ? 'warning' : 'danger';
-        
+
         let detailsHtml = '';
         if (r.details && r.details.length > 0) {
             const correctCount = r.details.filter(d => d.isCorrect).length;
             const wrongCount = r.details.filter(d => !d.isCorrect && d.userAns !== 'Not answered').length;
             const skippedCount = r.details.filter(d => d.userAns === 'Not answered').length;
-            
+
             detailsHtml = `
                 <div class="mt-2 small">
                     <span class="badge bg-success me-1">✓ ${correctCount} Correct</span>
@@ -1170,7 +1317,7 @@ function showResults(report) {
                 </div>
             `;
         }
-        
+
         html += `
             <div class="mb-4 border rounded p-3 result-round">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1188,7 +1335,7 @@ function showResults(report) {
             </div>
         `;
     });
-    
+
     if (report.rounds.length === 2) {
         const r1 = report.rounds[0];
         const r2 = report.rounds[1];
@@ -1196,12 +1343,12 @@ function showResults(report) {
         const percent1 = parseFloat(r1.percentage) || 0;
         const percent2 = parseFloat(r2.percentage) || 0;
         const percentDiff = (percent2 - percent1).toFixed(1);
-        
+
         const sameTopics = JSON.stringify(r1.paperIds?.sort()) === JSON.stringify(r2.paperIds?.sort());
-        const topicNote = sameTopics ? 
-            '<small class="d-block text-muted mt-2">📚 Same topics tested - comparing open book vs closed book performance</small>' : 
+        const topicNote = sameTopics ?
+            '<small class="d-block text-muted mt-2">📚 Same topics tested - comparing open book vs closed book performance</small>' :
             '<small class="d-block text-muted mt-2">Different topics in each round</small>';
-        
+
         html += `
             <div class="alert ${scoreDiff > 0 ? 'alert-success' : scoreDiff < 0 ? 'alert-danger' : 'alert-info'} mb-3 result-comparison">
                 <h6 class="alert-heading">📊 Round 2 vs Round 1 Comparison</h6>
@@ -1220,14 +1367,14 @@ function showResults(report) {
                     Performance Change: ${scoreDiff > 0 ? '+' : ''}${scoreDiff} questions 
                     (${percentDiff > 0 ? '+' : ''}${percentDiff}%)
                 </p>
-                <small>${scoreDiff > 0 ? '🎉 Great improvement! You performed better without the book.' : 
-                        scoreDiff < 0 ? '📚 The book helped! Consider reviewing the material more.' : 
-                        '✓ Consistent performance across both rounds.'}</small>
+                <small>${scoreDiff > 0 ? '🎉 Great improvement! You performed better without the book.' :
+                scoreDiff < 0 ? '📚 The book helped! Consider reviewing the material more.' :
+                    '✓ Consistent performance across both rounds.'}</small>
                 ${topicNote}
             </div>
         `;
     }
-    
+
     document.getElementById('results-content').innerHTML = html;
     new bootstrap.Modal(document.getElementById('resultsModal')).show();
 }
@@ -1236,79 +1383,79 @@ function showResults(report) {
 document.getElementById('download-result-btn').addEventListener('click', async () => {
     if (!currentReport) return;
     trackEvent('result_download', { 'quiz_title': currentReport.quizTitle });
-    
+
     try {
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 800;
         canvas.height = 600 + (currentReport.rounds.length * 150);
         const ctx = canvas.getContext('2d');
-        
+
         // Background
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         // Title
         ctx.fillStyle = '#1e293b';
         ctx.font = 'bold 32px Inter, Arial';
         ctx.textAlign = 'center';
         ctx.fillText(currentReport.quizTitle, 400, 50);
-        
+
         // Date
         ctx.font = '16px Inter, Arial';
         ctx.fillStyle = '#64748b';
         ctx.fillText(new Date(currentReport.submittedAt).toLocaleString(), 400, 80);
-        
+
         // Time
         const totalMinutes = Math.floor((currentReport.totalTime || 0) / 60);
         const totalSeconds = (currentReport.totalTime || 0) % 60;
         ctx.fillText(`Total Time: ${totalMinutes}m ${totalSeconds}s`, 400, 105);
-        
+
         let yPos = 150;
-        
+
         // Rounds
         currentReport.rounds.forEach((r, idx) => {
             const percentage = parseFloat(r.percentage) || 0;
             const grade = percentage >= 80 ? 'Excellent' : percentage >= 60 ? 'Good' : percentage >= 40 ? 'Fair' : 'Needs Improvement';
-            
+
             // Round box
             ctx.fillStyle = '#f8fafc';
             ctx.fillRect(50, yPos, 700, 120);
             ctx.strokeStyle = '#e2e8f0';
             ctx.lineWidth = 2;
             ctx.strokeRect(50, yPos, 700, 120);
-            
+
             // Round title
             ctx.fillStyle = '#1e293b';
             ctx.font = 'bold 24px Inter, Arial';
             ctx.textAlign = 'left';
             ctx.fillText(`Round ${r.round} ${r.openBook ? '📖' : '📕'}`, 70, yPos + 35);
-            
+
             // Grade
             ctx.font = '18px Inter, Arial';
             ctx.textAlign = 'right';
             ctx.fillText(grade, 730, yPos + 35);
-            
+
             // Score
             ctx.font = 'bold 36px Inter, Arial';
             ctx.textAlign = 'left';
             ctx.fillText(`${r.score || 0}/${r.total || 0}`, 70, yPos + 80);
-            
+
             // Percentage
             const color = percentage >= 80 ? '#10b981' : percentage >= 60 ? '#3b82f6' : percentage >= 40 ? '#f59e0b' : '#ef4444';
             ctx.fillStyle = color;
             ctx.textAlign = 'right';
             ctx.fillText(`${percentage.toFixed(1)}%`, 730, yPos + 80);
-            
+
             // Progress bar
             ctx.fillStyle = '#e2e8f0';
             ctx.fillRect(70, yPos + 95, 660, 10);
             ctx.fillStyle = color;
             ctx.fillRect(70, yPos + 95, (660 * percentage / 100), 10);
-            
+
             yPos += 140;
         });
-        
+
         // Convert to blob and download
         canvas.toBlob(blob => {
             const url = URL.createObjectURL(blob);
@@ -1318,7 +1465,7 @@ document.getElementById('download-result-btn').addEventListener('click', async (
             a.click();
             URL.revokeObjectURL(url);
         });
-        
+
         alert('Result image downloaded!');
     } catch (error) {
         alert('Failed to generate image: ' + error.message);
@@ -1329,25 +1476,25 @@ document.getElementById('download-result-btn').addEventListener('click', async (
 document.getElementById('share-result-btn').addEventListener('click', async () => {
     if (!currentReport) return;
     trackEvent('result_share', { 'quiz_title': currentReport.quizTitle });
-    
+
     const totalMinutes = Math.floor((currentReport.totalTime || 0) / 60);
     const totalSeconds = (currentReport.totalTime || 0) % 60;
-    
+
     let text = `📊 Quiz Results: ${currentReport.quizTitle}\n`;
     text += `⏱️ Time: ${totalMinutes}m ${totalSeconds}s\n\n`;
-    
+
     currentReport.rounds.forEach(r => {
         const percentage = parseFloat(r.percentage) || 0;
         text += `Round ${r.round} ${r.openBook ? '📖' : '📕'}: ${r.score}/${r.total} (${percentage.toFixed(1)}%)\n`;
     });
-    
+
     if (currentReport.rounds.length === 2) {
         const r1 = currentReport.rounds[0];
         const r2 = currentReport.rounds[1];
         const scoreDiff = (r2.score || 0) - (r1.score || 0);
         text += `\n📈 Improvement: ${scoreDiff > 0 ? '+' : ''}${scoreDiff} questions`;
     }
-    
+
     // Try Web Share API
     if (navigator.share) {
         try {
@@ -1377,13 +1524,19 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
         alert('Please login to create quizzes');
         return;
     }
-    
+
     const title = document.getElementById('quiz-title').value;
     if (!title.trim()) {
         alert('Please enter a quiz title');
         return;
     }
     
+    const targetClass = document.getElementById('quiz-target-class').value;
+    if (!targetClass) {
+        alert('Please select a Target Class');
+        return;
+    }
+
     const isPrivate = document.getElementById('quiz-private').checked;
     const numRounds = parseInt(document.getElementById('num-rounds').value);
     const numQuestions = parseInt(document.getElementById('num-questions').value);
@@ -1398,13 +1551,13 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
             alert(`Please select at least one question paper for Round ${i}`);
             return;
         }
-        
+
         const openBook = i === 1 ? document.getElementById(`openbook-${i}`).checked : false;
-        
+
         let referenceConfig = null;
         if (openBook) {
             const refType = document.getElementById(`ref-type-${i}`).value;
-            
+
             if (refType === 'pdf-url') {
                 const pdfUrl = document.getElementById(`pdf-url-input-${i}`).value;
                 if (!pdfUrl) {
@@ -1427,18 +1580,19 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
                 };
             }
         }
-        
+
         rounds.push({ papers, openBook, referenceConfig });
     }
 
     const quizData = {
-        title, 
+        title,
+        targetClass,
         isPrivate,
-        numRounds, 
-        numQuestions, 
-        randomQuestions, 
-        timeLimitEnabled, 
-        timeLimit, 
+        numRounds,
+        numQuestions,
+        randomQuestions,
+        timeLimitEnabled,
+        timeLimit,
         rounds,
         createdBy: state.currentUser.uid,
         createdByName: state.currentUser.displayName,
@@ -1446,7 +1600,7 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
     };
 
     try {
-        trackEvent('quiz_create_save', { 
+        trackEvent('quiz_create_save', {
             'quiz_title': title,
             'num_rounds': numRounds,
             'num_questions': numQuestions,
@@ -1455,7 +1609,7 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
             'has_time_limit': timeLimitEnabled
         });
         const docRef = await db.collection('quizzes').add(quizData);
-        
+
         bootstrap.Modal.getInstance(document.getElementById('createQuizModal')).hide();
         document.getElementById('quiz-form').reset();
         alert('Quiz created successfully!');

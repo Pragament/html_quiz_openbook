@@ -33,9 +33,14 @@
 
         <div class="row mb-4">
             <div class="col-md-8 mx-auto">
-                <div class="input-group input-group-lg shadow-sm">
-                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                    <input type="text" id="quiz-search" class="form-control" placeholder="Search quizzes...">
+                <div class="d-flex gap-2">
+                    <div class="input-group input-group-lg shadow-sm flex-grow-1">
+                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                        <input type="text" id="quiz-search" class="form-control" placeholder="Search quizzes...">
+                    </div>
+                    <select id="homepage-class-filter" class="form-select form-select-lg shadow-sm" style="width: auto; min-width: 150px;">
+                        <option value="">All Classes</option>
+                    </select>
                 </div>
             </div>
         </div>
@@ -67,6 +72,13 @@
                 </div>
                 <div class="modal-body">
                     <form id="quiz-form">
+                        <div class="mb-3">
+                            <label class="form-label">Target Class</label>
+                            <select class="form-select" id="quiz-target-class" required>
+                                <option value="">Select a Class</option>
+                            </select>
+                            <small class="text-muted">This filters the question papers available for each round.</small>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">Quiz Title</label>
                             <input type="text" class="form-control" id="quiz-title" required>
