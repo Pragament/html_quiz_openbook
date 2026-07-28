@@ -1,0 +1,548 @@
+/*
+ * quiz-formats.css — styles for the alternate question formats.
+ *
+ * Loaded AFTER style.css, so the accessibility fixes at the bottom land as
+ * plain overrides and style.css needs no edits.
+ *
+ * Sizing is in `em` throughout: embed.html sets font-size: 0.9rem on
+ * #questions-container, and em lets these formats scale down with it.
+ */
+
+/* ------------------------------------------------------------ shared shell */
+
+.qf-card {
+    padding: 1.25em;
+}
+
+.qf-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75em;
+    margin-bottom: 0.75em;
+}
+
+.qf-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.35em 0.75em;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: var(--primary-color);
+    font-size: 0.8em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.qf-link {
+    background: none;
+    border: none;
+    padding: 0.35em 0.5em;
+    color: var(--text-secondary);
+    font-size: 0.8em;
+    text-decoration: underline;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.qf-link:hover {
+    color: var(--primary-color);
+}
+
+.qf-qnum {
+    font-size: 0.95em;
+    color: var(--text-secondary);
+    margin-bottom: 0.35em;
+}
+
+.qf-stem {
+    font-size: 1.15em;
+    line-height: 1.45;
+    margin-bottom: 0.6em;
+    overflow-wrap: anywhere;
+}
+
+.qf-instruction {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    margin-bottom: 1.1em;
+}
+
+.qf-empty {
+    padding: 1em;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.qf-restore {
+    margin-top: 0.75em;
+    text-align: center;
+}
+
+/* ------------------------------------------------------------- flip cards */
+
+.qf-grid {
+    display: grid;
+    gap: 0.75em;
+}
+
+.qf-flip-grid {
+    grid-template-columns: repeat(auto-fit, minmax(11em, 1fr));
+}
+
+.qf-flip {
+    perspective: 800px;
+}
+
+.qf-flip-inner {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.45s ease;
+    min-height: 6em;
+}
+
+.qf-flip.is-flipped .qf-flip-inner {
+    transform: rotateY(180deg);
+}
+
+.qf-face {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5em;
+    width: 100%;
+    min-height: 6em;
+    padding: 1em 0.85em;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: var(--surface-color);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    text-align: center;
+}
+
+/*
+ * The back face stays in flow so it drives the card's height — that is what
+ * lets a long option grow the card instead of being clipped. The front is
+ * absolutely positioned on top of it.
+ */
+.qf-face-back {
+    position: relative;
+    transform: rotateY(180deg);
+    /* Reserves a band for the absolutely-positioned "turn back" button so it
+       never lands on the option text, without narrowing the text column. */
+    padding-top: 2.3em;
+}
+
+.qf-face-front {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    cursor: pointer;
+}
+
+.qf-face-front:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.qf-flip-hint {
+    font-size: 0.78em;
+    color: var(--text-secondary);
+}
+
+.qf-flip-text {
+    font-size: 0.95em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.qf-choose {
+    padding: 0.45em 0.9em;
+    border: 1px solid var(--primary-color);
+    border-radius: 6px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 0.82em;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.qf-choose:hover {
+    filter: brightness(1.08);
+}
+
+.qf-flip-back {
+    position: absolute;
+    top: 0.4em;
+    right: 0.4em;
+    width: 1.9em;
+    height: 1.9em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.qf-flip-back:hover {
+    background: #f1f5f9;
+}
+
+.qf-flip.is-chosen .qf-face-back {
+    border-color: var(--primary-color);
+    background: #eff6ff;
+}
+
+.qf-flip.is-chosen .qf-choose {
+    background: var(--success-color);
+    border-color: var(--success-color);
+}
+
+.qf-flip.is-key .qf-face-back {
+    border-color: var(--success-color);
+    background: #ecfdf5;
+}
+
+.qf-key-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--success-color);
+}
+
+/* ----------------------------------------------------------- drag and drop */
+
+.qf-drop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 4.5em;
+    padding: 0.75em;
+    margin-bottom: 1em;
+    border: 2px dashed #cbd5e1;
+    border-radius: 10px;
+    background: #f8fafc;
+    transition: background-color 0.15s, border-color 0.15s;
+    cursor: pointer;
+}
+
+.qf-drop-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    color: var(--text-secondary);
+    font-size: 0.88em;
+}
+
+.qf-drop.is-hover,
+.qf-drop.is-awaiting {
+    border-color: var(--primary-color);
+    border-style: solid;
+    background: #eff6ff;
+}
+
+.qf-drop.is-awaiting {
+    animation: qf-pulse 1.4s ease-in-out infinite;
+}
+
+.qf-drop.is-filled {
+    border-style: solid;
+    border-color: var(--success-color);
+    background: #ecfdf5;
+}
+
+@keyframes qf-pulse {
+    0%, 100% { border-color: var(--primary-color); }
+    50% { border-color: #93c5fd; }
+}
+
+.qf-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6em;
+}
+
+.qf-tray.is-locked {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.qf-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55em;
+    max-width: 100%;
+    padding: 0.65em 0.85em;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: var(--surface-color);
+    color: var(--text-primary);
+    font-size: 0.92em;
+    text-align: left;
+    cursor: grab;
+    /* Required for pointer-driven dragging: without it a touch that starts on a
+       chip becomes a page scroll and the browser cancels the gesture. */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.qf-chip:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.qf-chip.is-picked {
+    border-color: var(--primary-color);
+    background: #eff6ff;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.qf-chip.is-dragging {
+    opacity: 0.35;
+}
+
+.qf-chip.is-placed {
+    cursor: default;
+    border-color: var(--success-color);
+    background: var(--surface-color);
+}
+
+.qf-chip-letter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.75em;
+    height: 1.75em;
+    border-radius: 50%;
+    border: 2px solid #cbd5e1;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.qf-chip.is-picked .qf-chip-letter,
+.qf-chip.is-placed .qf-chip-letter {
+    border-color: currentColor;
+}
+
+.qf-chip-text {
+    overflow-wrap: anywhere;
+}
+
+.qf-chip-x {
+    flex-shrink: 0;
+    width: 1.5em;
+    height: 1.5em;
+    margin-left: 0.15em;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 1.1em;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.qf-chip-x:hover {
+    background: #fee2e2;
+    color: var(--danger-color);
+}
+
+/* The drag ghost. Fixed positioning means hit-testing can use raw viewport
+   coordinates, with no scroll-offset maths inside the scrolling panel. */
+.qf-ghost {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2000;
+    pointer-events: none;
+    opacity: 0.92;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+    border-color: var(--primary-color);
+}
+
+/* ------------------------------------------------------------ true / false */
+
+.qf-tf-statement {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+    padding: 1em;
+    margin-bottom: 1em;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.qf-tf-lead {
+    font-size: 0.82em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+}
+
+.qf-tf-claim {
+    font-size: 1.1em;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.qf-tf-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75em;
+}
+
+.qf-tf-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    min-height: 4.5em;
+    padding: 0.85em;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: var(--surface-color);
+    color: var(--text-primary);
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.qf-tf-btn i {
+    font-size: 1.4em;
+}
+
+.qf-tf-btn:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.qf-tf-btn.is-true.is-active,
+.qf-tf-btn.is-true.is-key {
+    border-color: var(--success-color);
+    background: #ecfdf5;
+    color: var(--success-color);
+}
+
+.qf-tf-btn.is-false.is-active,
+.qf-tf-btn.is-false.is-key {
+    border-color: var(--danger-color);
+    background: #fef2f2;
+    color: var(--danger-color);
+}
+
+.qf-tf-btn.is-key {
+    box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* ------------------------------------------- narrow (open-book) column */
+
+/*
+ * #questions-section swaps between col-lg-6 and col-lg-12 in loadRound(). That
+ * is a class, not a viewport width, so media queries cannot see it — target the
+ * class directly instead.
+ */
+#questions-section.col-lg-6 .qf-flip-grid {
+    grid-template-columns: 1fr 1fr;
+}
+
+#questions-section.col-lg-6 .qf-tray {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+#questions-section.col-lg-6 .qf-chip {
+    border-radius: 10px;
+}
+
+/* --------------------------------------------------- accessibility polish */
+
+/* style.css defines no focus style at all; these are keyboard-only paths. */
+.qf-face-front:focus-visible,
+.qf-choose:focus-visible,
+.qf-flip-back:focus-visible,
+.qf-chip:focus-visible,
+.qf-chip-x:focus-visible,
+.qf-drop:focus-visible,
+.qf-tf-btn:focus-visible,
+.qf-link:focus-visible,
+.option-label:focus-visible,
+.question-number:focus-visible,
+.nav-btn:focus-visible {
+    outline: 3px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+/* ------------------------------------------------------------- responsive */
+
+@media (max-width: 768px) {
+    .qf-card {
+        padding: 1em 0.85em;
+    }
+
+    .qf-flip-grid,
+    #questions-section.col-lg-6 .qf-flip-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .qf-tray {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .qf-chip {
+        border-radius: 10px;
+    }
+
+    /* WCAG minimum touch target. */
+    .qf-chip,
+    .qf-choose,
+    .qf-tf-btn,
+    .qf-drop {
+        min-height: 48px;
+    }
+
+    /* style.css:251 drops these to 36px, below the accessible minimum. */
+    .question-number {
+        min-width: 44px;
+        width: 44px;
+        height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .qf-flip-inner,
+    .qf-chip,
+    .qf-drop,
+    .qf-tf-btn {
+        transition: none !important;
+    }
+
+    .qf-drop.is-awaiting {
+        animation: none;
+    }
+}
