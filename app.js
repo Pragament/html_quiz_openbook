@@ -1606,6 +1606,7 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
         randomQuestions,
         timeLimitEnabled,
         timeLimit,
+        questionFormat: (window.qfGetSelectedQuizFormat && window.qfGetSelectedQuizFormat()) || 'classic',
         rounds,
         createdBy: state.currentUser.uid,
         createdByName: state.currentUser.displayName,
@@ -1631,3 +1632,8 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
         alert('Failed to create quiz: ' + error.message);
     }
 });
+
+// Read-only handle for quiz-formats.js. `state` and `elements` are declared with
+// `const`, so they live in the script's lexical scope rather than on `window` and
+// are otherwise unreachable from another file.
+window.__quizBridge = { get state() { return state; }, get elements() { return elements; } };
