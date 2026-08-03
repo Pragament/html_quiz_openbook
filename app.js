@@ -54,6 +54,7 @@ const state = {
 // DOM Elements
 const elements = {
     loginBtn: document.getElementById('login-btn'),
+    studentLoginBtn: document.getElementById('student-login-btn'),
     logoutBtn: document.getElementById('logout-btn'),
     userInfo: document.getElementById('user-info'),
     userName: document.getElementById('user-name'),
@@ -142,6 +143,16 @@ function initEventListeners() {
         classFilterInput.addEventListener('change', () => {
             trackEvent('quiz_class_filter', { 'class': classFilterInput.value });
             filterQuizzes();
+        });
+    }
+
+    if (elements.studentLoginBtn) {
+        elements.studentLoginBtn.addEventListener('click', () => {
+            const modalEl = document.getElementById('studentLoginModal');
+            if (modalEl) {
+                const studentModal = new bootstrap.Modal(modalEl);
+                studentModal.show();
+            }
         });
     }
 
@@ -329,16 +340,35 @@ function startTimer(seconds) {
 
 // Authentication
 function initAuth() {
+    const studentUser = JSON.parse(sessionStorage.getItem('studentUser') || 'null');
+    if (studentUser) {
+        if (elements.loginBtn) elements.loginBtn.classList.add('d-none');
+        if (elements.studentLoginBtn) elements.studentLoginBtn.classList.add('d-none');
+        if (elements.userInfo) elements.userInfo.classList.remove('d-none');
+        if (elements.userName) {
+            const name = studentUser.name || studentUser.displayName || studentUser.studentName || studentUser.fullName || 'Student';
+            elements.userName.textContent = `Student: ${name}`;
+        }
+        if (elements.createQuizBtn) elements.createQuizBtn.classList.add('d-none');
+        if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.add('d-none');
+        return;
+    }
+
     auth.onAuthStateChanged(user => {
         state.currentUser = user;
+        const studentUserActive = JSON.parse(sessionStorage.getItem('studentUser') || 'null');
+        if (studentUserActive) return;
+
         if (user) {
             if (elements.loginBtn) elements.loginBtn.classList.add('d-none');
+            if (elements.studentLoginBtn) elements.studentLoginBtn.classList.add('d-none');
             if (elements.userInfo) elements.userInfo.classList.remove('d-none');
             if (elements.userName) elements.userName.textContent = user.displayName || user.email;
             if (elements.createQuizBtn) elements.createQuizBtn.classList.remove('d-none');
             if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.remove('d-none');
         } else {
             if (elements.loginBtn) elements.loginBtn.classList.remove('d-none');
+            if (elements.studentLoginBtn) elements.studentLoginBtn.classList.remove('d-none');
             if (elements.userInfo) elements.userInfo.classList.add('d-none');
             if (elements.createQuizBtn) elements.createQuizBtn.classList.add('d-none');
             if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.add('d-none');
@@ -363,7 +393,12 @@ if (elements.loginBtn) {
 if (elements.logoutBtn) {
     elements.logoutBtn.addEventListener('click', () => {
         trackEvent('logout');
-        auth.signOut();
+        if (sessionStorage.getItem('studentUser')) {
+            sessionStorage.removeItem('studentUser');
+            window.location.reload();
+        } else {
+            auth.signOut();
+        }
     });
 }
 
@@ -426,6 +461,9 @@ async function handleStudentLogin() {
 
         // Store student in sessionStorage
         sessionStorage.setItem('studentUser', JSON.stringify(foundStudent));
+
+        // Update Auth UI
+        initAuth();
 
         // Hide modal
         const modalEl = document.getElementById('studentLoginModal');
@@ -745,8 +783,7 @@ function updateRoundsConfig() {
 
 // Start Quiz
 async function startQuiz(quizId) {
-    const isEmbedPage = window.location.pathname.includes('embed.html');
-    if (isEmbedPage && !sessionStorage.getItem('studentUser')) {
+    if (!state.currentUser && !sessionStorage.getItem('studentUser')) {
         pendingQuizId = quizId;
         const modalEl = document.getElementById('studentLoginModal');
         if (modalEl) {
@@ -1041,7 +1078,7 @@ function submitQuiz() {
     });
 
     saveReport(report);
-    if (window.location.pathname.includes('embed.html')) {
+    if (sessionStorage.getItem('studentUser')) {
         saveReportToFirestore(report);
     }
     showResults(report);
