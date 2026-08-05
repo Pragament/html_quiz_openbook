@@ -54,6 +54,7 @@ const state = {
 // DOM Elements
 const elements = {
     loginBtn: document.getElementById('login-btn'),
+    studentLoginBtn: document.getElementById('student-login-btn'),
     logoutBtn: document.getElementById('logout-btn'),
     userInfo: document.getElementById('user-info'),
     userName: document.getElementById('user-name'),
@@ -104,7 +105,7 @@ window.filterQuizzes = () => {
 
     const term = quizSearchInput ? quizSearchInput.value.toLowerCase() : '';
     let selectedClass = classFilterInput ? classFilterInput.value : '';
-    
+
     // Check for active class button in embed.html
     if (classButtonsContainer) {
         const activeClassBtn = document.querySelector('.class-filter-btn.active');
@@ -116,7 +117,7 @@ window.filterQuizzes = () => {
             return;
         }
     }
-    
+
     const filtered = state.quizzes.filter(q => {
         const matchesSearch = q.title.toLowerCase().includes(term);
         const matchesClass = !selectedClass || (q.targetClass && q.targetClass.toString().trim() === selectedClass);
@@ -137,21 +138,31 @@ function initEventListeners() {
             filterQuizzes();
         });
     }
-    
+
     if (classFilterInput) {
         classFilterInput.addEventListener('change', () => {
             trackEvent('quiz_class_filter', { 'class': classFilterInput.value });
             filterQuizzes();
         });
     }
-    
+
+    if (elements.studentLoginBtn) {
+        elements.studentLoginBtn.addEventListener('click', () => {
+            const modalEl = document.getElementById('studentLoginModal');
+            if (modalEl) {
+                const studentModal = new bootstrap.Modal(modalEl);
+                studentModal.show();
+            }
+        });
+    }
+
     // Class buttons delegation for embed.html
     const classButtonsContainer = document.getElementById('class-buttons-container');
     if (classButtonsContainer) {
         classButtonsContainer.addEventListener('click', (e) => {
             if (e.target.classList.contains('class-filter-btn') || e.target.closest('.class-filter-btn')) {
                 const btn = e.target.classList.contains('class-filter-btn') ? e.target : e.target.closest('.class-filter-btn');
-                
+
                 // If it's a reset action (clicking the already active button could act as reset, or we just keep it simple)
                 if (btn.classList.contains('active')) {
                     // Reset: show all buttons
@@ -174,15 +185,43 @@ function initEventListeners() {
                             b.style.display = 'none'; // Hide unselected
                         }
                     });
-                    
+
                     btn.classList.add('active', 'btn-primary');
                     btn.classList.remove('btn-outline-primary');
                     btn.innerHTML = `<i class="bi bi-arrow-left me-2"></i> ${btn.textContent}`; // Add back arrow to indicate they can click to go back
-                    
+
                     trackEvent('quiz_class_button', { 'class': btn.dataset.class });
                     filterQuizzes();
                 }
             }
+        });
+    }
+
+    // Student Login Modal Event Listeners
+    const studentSubmitBtn = document.getElementById('student-login-submit');
+    const studentCancelBtn = document.getElementById('student-login-cancel');
+    const studentForm = document.getElementById('student-login-form');
+
+    if (studentSubmitBtn) {
+        studentSubmitBtn.addEventListener('click', handleStudentLogin);
+    }
+    if (studentCancelBtn) {
+        studentCancelBtn.addEventListener('click', () => {
+            pendingQuizId = null;
+            const modalEl = document.getElementById('studentLoginModal');
+            if (modalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+            showView('homepage');
+        });
+    }
+    if (studentForm) {
+        studentForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleStudentLogin();
         });
     }
 }
@@ -301,16 +340,35 @@ function startTimer(seconds) {
 
 // Authentication
 function initAuth() {
+    const studentUser = JSON.parse(sessionStorage.getItem('studentUser') || 'null');
+    if (studentUser) {
+        if (elements.loginBtn) elements.loginBtn.classList.add('d-none');
+        if (elements.studentLoginBtn) elements.studentLoginBtn.classList.add('d-none');
+        if (elements.userInfo) elements.userInfo.classList.remove('d-none');
+        if (elements.userName) {
+            const name = studentUser.name || studentUser.displayName || studentUser.studentName || studentUser.fullName || 'Student';
+            elements.userName.textContent = `Student: ${name}`;
+        }
+        if (elements.createQuizBtn) elements.createQuizBtn.classList.add('d-none');
+        if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.add('d-none');
+        return;
+    }
+
     auth.onAuthStateChanged(user => {
         state.currentUser = user;
+        const studentUserActive = JSON.parse(sessionStorage.getItem('studentUser') || 'null');
+        if (studentUserActive) return;
+
         if (user) {
             if (elements.loginBtn) elements.loginBtn.classList.add('d-none');
+            if (elements.studentLoginBtn) elements.studentLoginBtn.classList.add('d-none');
             if (elements.userInfo) elements.userInfo.classList.remove('d-none');
             if (elements.userName) elements.userName.textContent = user.displayName || user.email;
             if (elements.createQuizBtn) elements.createQuizBtn.classList.remove('d-none');
             if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.remove('d-none');
         } else {
             if (elements.loginBtn) elements.loginBtn.classList.remove('d-none');
+            if (elements.studentLoginBtn) elements.studentLoginBtn.classList.remove('d-none');
             if (elements.userInfo) elements.userInfo.classList.add('d-none');
             if (elements.createQuizBtn) elements.createQuizBtn.classList.add('d-none');
             if (elements.myQuizzesBtn) elements.myQuizzesBtn.classList.add('d-none');
@@ -335,8 +393,137 @@ if (elements.loginBtn) {
 if (elements.logoutBtn) {
     elements.logoutBtn.addEventListener('click', () => {
         trackEvent('logout');
-        auth.signOut();
+        if (sessionStorage.getItem('studentUser')) {
+            sessionStorage.removeItem('studentUser');
+            window.location.reload();
+        } else {
+            auth.signOut();
+        }
     });
+}
+
+// Student Login State & Handlers (for embed.html)
+let pendingQuizId = null;
+
+async function handleStudentLogin() {
+    const admissionInput = document.getElementById('student-admission');
+    const phoneInput = document.getElementById('student-phone');
+    const errorDiv = document.getElementById('student-login-error');
+    const spinner = document.getElementById('student-login-spinner');
+    const submitBtn = document.getElementById('student-login-submit');
+
+    if (!admissionInput || !phoneInput) return;
+
+    const admissionNo = admissionInput.value.trim();
+    const phone = phoneInput.value.trim();
+
+    if (!admissionNo || !phone) {
+        errorDiv.textContent = 'Please enter both admission number and phone number.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+
+    errorDiv.classList.add('d-none');
+    spinner.classList.remove('d-none');
+    submitBtn.disabled = true;
+
+    try {
+        // Query firebase for student. Try multiple field naming conventions for safety.
+        let studentQuery = await db.collection('students').where('admissionNumber', '==', admissionNo).get();
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNumber', '==', Number(admissionNo)).get();
+        }
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNo', '==', admissionNo).get();
+        }
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNo', '==', Number(admissionNo)).get();
+        }
+
+        let foundStudent = null;
+        if (!studentQuery.empty) {
+            studentQuery.forEach(doc => {
+                const data = doc.data();
+                const docPhone = String(data.phoneNumber || data.phone || data.phone_number || '').trim();
+                if (docPhone === String(phone).trim()) {
+                    foundStudent = { id: doc.id, ...data };
+                }
+            });
+        }
+
+        if (!foundStudent) {
+            errorDiv.textContent = 'Student credentials not found. Please verify your admission number and phone number.';
+            errorDiv.classList.remove('d-none');
+            spinner.classList.add('d-none');
+            submitBtn.disabled = false;
+            return;
+        }
+
+        // Store student in sessionStorage
+        sessionStorage.setItem('studentUser', JSON.stringify(foundStudent));
+
+        // Update Auth UI
+        initAuth();
+
+        // Hide modal
+        const modalEl = document.getElementById('studentLoginModal');
+        if (modalEl) {
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        }
+
+        // Reset form
+        document.getElementById('student-login-form').reset();
+        spinner.classList.add('d-none');
+        submitBtn.disabled = false;
+
+        // Proceed to start quiz
+        if (pendingQuizId) {
+            const quizId = pendingQuizId;
+            pendingQuizId = null;
+            startQuiz(quizId);
+        }
+    } catch (error) {
+        console.error('Student login error:', error);
+        errorDiv.textContent = 'An error occurred during authentication: ' + error.message;
+        errorDiv.classList.remove('d-none');
+        spinner.classList.add('d-none');
+        submitBtn.disabled = false;
+    }
+}
+
+async function saveReportToFirestore(report) {
+    const studentUser = JSON.parse(sessionStorage.getItem('studentUser') || 'null');
+    if (!studentUser) return;
+
+    try {
+        const studentName = studentUser.name || studentUser.displayName || studentUser.studentName || studentUser.fullName || 'Student';
+        const admissionNo = studentUser.admissionNumber || studentUser.admissionNo || '';
+        const phoneNumber = studentUser.phoneNumber || studentUser.phone || '';
+
+        const docRef = await db.collection('quiz_test_results').add({
+            studentName: studentName,
+            admissionNumber: admissionNo,
+            phoneNumber: phoneNumber,
+            quizId: report.quizId,
+            quizTitle: report.quizTitle,
+            submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            totalTime: report.totalTime,
+            rounds: report.rounds.map(r => ({
+                round: r.round,
+                score: r.score,
+                total: r.total,
+                percentage: r.percentage,
+                openBook: r.openBook,
+                paperIds: r.paperIds
+            }))
+        });
+        console.log('✅ Quiz result saved to Firestore with ID:', docRef.id);
+    } catch (error) {
+        console.error('❌ Failed to save quiz result to Firestore:', error);
+    }
 }
 
 // Load Quizzes
@@ -429,32 +616,32 @@ async function loadQuestionPapers() {
 
 function getUniqueClasses() {
     // Generate classes 1 to 10
-    return Array.from({length: 10}, (_, i) => (i + 1).toString());
+    return Array.from({ length: 10 }, (_, i) => (i + 1).toString());
 }
 
 function populateClassDropdowns() {
     const classes = getUniqueClasses();
-    
+
     // Homepage filter
     const hpFilter = document.getElementById('homepage-class-filter');
     if (hpFilter) {
         const currentValue = hpFilter.value;
-        hpFilter.innerHTML = '<option value="">All Classes</option>' + 
+        hpFilter.innerHTML = '<option value="">All Classes</option>' +
             classes.map(c => `<option value="${c}">Class ${c}</option>`).join('');
         hpFilter.value = currentValue;
     }
-    
+
     // Modal target class
     const targetSelect = document.getElementById('quiz-target-class');
     if (targetSelect) {
         const currentValue = targetSelect.value;
-        targetSelect.innerHTML = '<option value="">Select a Class</option>' + 
+        targetSelect.innerHTML = '<option value="">Select a Class</option>' +
             classes.map(c => `<option value="${c}">Class ${c}</option>`).join('');
         if (currentValue && classes.includes(currentValue)) {
             targetSelect.value = currentValue;
         }
     }
-    
+
     // Embed.html class buttons
     const classButtonsContainer = document.getElementById('class-buttons-container');
     if (classButtonsContainer) {
@@ -507,7 +694,7 @@ function updateRoundsConfig() {
     const container = document.getElementById('rounds-config');
     const targetClassEl = document.getElementById('quiz-target-class');
     const targetClass = targetClassEl ? targetClassEl.value : '';
-    
+
     if (container) container.innerHTML = '';
 
     for (let i = 1; i <= numRounds; i++) {
@@ -518,7 +705,7 @@ function updateRoundsConfig() {
             const qCount = ` - ${p.questionCount} questions`;
             return `<option value="${p.id}">${p.title}${info}${qCount}</option>`;
         }).join('');
-        
+
         if (availablePapers.length === 0) {
             paperOptions = `<option value="" disabled>No question papers found.</option>`;
         }
@@ -596,6 +783,16 @@ function updateRoundsConfig() {
 
 // Start Quiz
 async function startQuiz(quizId) {
+    if (!state.currentUser && !sessionStorage.getItem('studentUser')) {
+        pendingQuizId = quizId;
+        const modalEl = document.getElementById('studentLoginModal');
+        if (modalEl) {
+            const studentModal = new bootstrap.Modal(modalEl);
+            studentModal.show();
+        }
+        return;
+    }
+
     try {
         const doc = await db.collection('quizzes').doc(quizId).get();
         if (!doc.exists) throw new Error('Quiz not found');
@@ -635,7 +832,7 @@ async function loadRound(roundNum) {
     });
     const refSection = document.getElementById('reference-material-section');
     const questionsCol = document.getElementById('questions-section');
-    
+
     if (!round.openBook) {
         if (refSection) refSection.classList.add('d-none', 'hidden');
         if (questionsCol) {
@@ -881,6 +1078,9 @@ function submitQuiz() {
     });
 
     saveReport(report);
+    if (sessionStorage.getItem('studentUser')) {
+        saveReportToFirestore(report);
+    }
     showResults(report);
     showView('homepage');
 }
@@ -1543,7 +1743,7 @@ document.getElementById('save-quiz-btn').addEventListener('click', async () => {
         alert('Please enter a quiz title');
         return;
     }
-    
+
     const targetClass = document.getElementById('quiz-target-class').value;
     if (!targetClass) {
         alert('Please select a Target Class');

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="quiz-formats.css">
 </head>
+
 <body>
     <!-- Auth Section -->
     <div id="auth-section" class="position-fixed top-0 end-0 p-3" style="z-index: 1000;">
@@ -20,9 +22,14 @@
                 <button id="logout-btn" class="btn btn-sm btn-outline-danger">Logout</button>
             </div>
         </div>
-        <button id="login-btn" class="btn btn-primary">
-            <i class="bi bi-google"></i> Login with Google
-        </button>
+        <div class="d-flex gap-2">
+            <button id="login-btn" class="btn btn-primary">
+                <i class="bi bi-google"></i> Login with Google
+            </button>
+            <button id="student-login-btn" class="btn btn-outline-primary bg-white">
+                <i class="bi bi-person-fill"></i> Student Login
+            </button>
+        </div>
     </div>
 
     <!-- Homepage -->
@@ -39,7 +46,8 @@
                         <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                         <input type="text" id="quiz-search" class="form-control" placeholder="Search quizzes...">
                     </div>
-                    <select id="homepage-class-filter" class="form-select form-select-lg shadow-sm" style="width: auto; min-width: 150px;">
+                    <select id="homepage-class-filter" class="form-select form-select-lg shadow-sm"
+                        style="width: auto; min-width: 150px;">
                         <option value="">All Classes</option>
                     </select>
                 </div>
@@ -87,13 +95,15 @@
                         <div class="mb-3">
                             <label class="form-label">Quiz Visibility</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-public" value="public" checked>
+                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-public"
+                                    value="public" checked>
                                 <label class="form-check-label" for="quiz-public">
                                     <strong>Public</strong> - Visible on homepage and searchable
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-private" value="private">
+                                <input class="form-check-input" type="radio" name="quiz-visibility" id="quiz-private"
+                                    value="private">
                                 <label class="form-check-label" for="quiz-private">
                                     <strong>Private</strong> - Only accessible via URL with OTP
                                 </label>
@@ -183,9 +193,12 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <h6 class="mb-0">Reference Material</h6>
                             <div>
-                                <button id="prev-page" class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-left"></i></button>
-                                <span class="mx-2">Page <span id="page-num">1</span> of <span id="page-count">--</span></span>
-                                <button id="next-page" class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-right"></i></button>
+                                <button id="prev-page" class="btn btn-sm btn-outline-secondary"><i
+                                        class="bi bi-chevron-left"></i></button>
+                                <span class="mx-2">Page <span id="page-num">1</span> of <span
+                                        id="page-count">--</span></span>
+                                <button id="next-page" class="btn btn-sm btn-outline-secondary"><i
+                                        class="bi bi-chevron-right"></i></button>
                             </div>
                         </div>
                     </div>
@@ -261,6 +274,37 @@
         </div>
     </div>
 
+    <!-- Student Login Modal -->
+    <div class="modal fade" id="studentLoginModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Student Authentication</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="student-login-error" class="alert alert-danger d-none"></div>
+                    <form id="student-login-form">
+                        <div class="mb-3">
+                            <label for="student-admission" class="form-label">Admission Number</label>
+                            <input type="text" class="form-control" id="student-admission" placeholder="Enter Admission Number" required autocomplete="off">
+                        </div>
+                        <div class="mb-3">
+                            <label for="student-phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="student-phone" placeholder="Enter Registered Phone Number" required autocomplete="off">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="student-login-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="student-login-submit">
+                        <span class="spinner-border spinner-border-sm d-none" id="student-login-spinner" role="status" aria-hidden="true"></span>
+                        Verify & Start Test
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -271,4 +315,5 @@
     <script src="quiz-formats.js"></script>
     <script src="quiz-format-setup.js"></script>
 </body>
+
 </html>

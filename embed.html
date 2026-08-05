@@ -239,6 +239,37 @@
         </div>
     </div>
 
+    <!-- Student Login Modal -->
+    <div class="modal fade" id="studentLoginModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Student Authentication</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="student-login-error" class="alert alert-danger d-none"></div>
+                    <form id="student-login-form">
+                        <div class="mb-3">
+                            <label for="student-admission" class="form-label">Admission Number</label>
+                            <input type="text" class="form-control" id="student-admission" placeholder="Enter Admission Number" required autocomplete="off">
+                        </div>
+                        <div class="mb-3">
+                            <label for="student-phone" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="student-phone" placeholder="Enter Registered Phone Number" required autocomplete="off">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="student-login-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="student-login-submit">
+                        <span class="spinner-border spinner-border-sm d-none" id="student-login-spinner" role="status" aria-hidden="true"></span>
+                        Verify & Start Test
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
