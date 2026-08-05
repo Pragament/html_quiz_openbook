@@ -224,6 +224,53 @@ function initEventListeners() {
             handleStudentLogin();
         });
     }
+
+    const studentToggleToRegister = document.getElementById('student-toggle-to-register');
+    const studentToggleToLogin = document.getElementById('student-toggle-to-login');
+    const studentRegisterForm = document.getElementById('student-register-form');
+    const studentRegisterCancel = document.getElementById('student-register-cancel');
+
+    if (studentToggleToRegister) {
+        studentToggleToRegister.addEventListener('click', () => {
+            const loginSection = document.getElementById('student-login-section');
+            const registerSection = document.getElementById('student-register-section');
+            const modalTitle = document.querySelector('#studentLoginModal .modal-title');
+            if (loginSection) loginSection.classList.add('d-none');
+            if (registerSection) registerSection.classList.remove('d-none');
+            if (modalTitle) modalTitle.textContent = 'Student Registration';
+        });
+    }
+
+    if (studentToggleToLogin) {
+        studentToggleToLogin.addEventListener('click', () => {
+            resetStudentModalState();
+        });
+    }
+
+    if (studentRegisterForm) {
+        studentRegisterForm.addEventListener('submit', handleStudentRegister);
+    }
+
+    if (studentRegisterCancel) {
+        studentRegisterCancel.addEventListener('click', () => {
+            pendingQuizId = null;
+            const modalEl = document.getElementById('studentLoginModal');
+            if (modalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+            showView('homepage');
+        });
+    }
+
+    const studentModalEl = document.getElementById('studentLoginModal');
+    if (studentModalEl) {
+        studentModalEl.addEventListener('hidden.bs.modal', () => {
+            resetStudentModalState();
+        });
+    }
 }
 
 // Navigation Prevention
@@ -488,6 +535,133 @@ async function handleStudentLogin() {
     } catch (error) {
         console.error('Student login error:', error);
         errorDiv.textContent = 'An error occurred during authentication: ' + error.message;
+        errorDiv.classList.remove('d-none');
+        spinner.classList.add('d-none');
+        submitBtn.disabled = false;
+    }
+}
+
+function resetStudentModalState() {
+    const loginSection = document.getElementById('student-login-section');
+    const registerSection = document.getElementById('student-register-section');
+    const modalTitle = document.querySelector('#studentLoginModal .modal-title');
+    const loginForm = document.getElementById('student-login-form');
+    const registerForm = document.getElementById('student-register-form');
+    const loginError = document.getElementById('student-login-error');
+    const registerError = document.getElementById('student-register-error');
+
+    if (loginSection) loginSection.classList.remove('d-none');
+    if (registerSection) registerSection.classList.add('d-none');
+    if (modalTitle) modalTitle.textContent = 'Student Authentication';
+    if (loginForm) loginForm.reset();
+    if (registerForm) registerForm.reset();
+    if (loginError) loginError.classList.add('d-none');
+    if (registerError) registerError.classList.add('d-none');
+}
+
+async function handleStudentRegister(e) {
+    if (e) e.preventDefault();
+
+    const nameInput = document.getElementById('student-reg-name');
+    const classInput = document.getElementById('student-reg-class');
+    const sectionInput = document.getElementById('student-reg-section');
+    const rollInput = document.getElementById('student-reg-roll');
+    const admissionInput = document.getElementById('student-reg-admission');
+    const phoneInput = document.getElementById('student-reg-phone');
+    const errorDiv = document.getElementById('student-register-error');
+    const spinner = document.getElementById('student-register-spinner');
+    const submitBtn = document.getElementById('student-register-submit');
+
+    if (!nameInput || !classInput || !sectionInput || !rollInput || !admissionInput || !phoneInput) return;
+
+    const name = nameInput.value.trim();
+    const studentClass = classInput.value.trim();
+    const section = sectionInput.value.trim();
+    const rollNumber = rollInput.value.trim();
+    const admissionNo = admissionInput.value.trim();
+    const phone = phoneInput.value.trim();
+
+    if (!name || !studentClass || !section || !rollNumber || !admissionNo || !phone) {
+        errorDiv.textContent = 'Please fill out all fields.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+
+    errorDiv.classList.add('d-none');
+    spinner.classList.remove('d-none');
+    submitBtn.disabled = true;
+
+    try {
+        // Check if student already exists with this admission number
+        let studentQuery = await db.collection('students').where('admissionNumber', '==', admissionNo).get();
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNumber', '==', Number(admissionNo)).get();
+        }
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNo', '==', admissionNo).get();
+        }
+        if (studentQuery.empty) {
+            studentQuery = await db.collection('students').where('admissionNo', '==', Number(admissionNo)).get();
+        }
+
+        if (!studentQuery.empty) {
+            errorDiv.textContent = 'A student with this admission number is already registered. Please check the number or use Login.';
+            errorDiv.classList.remove('d-none');
+            spinner.classList.add('d-none');
+            submitBtn.disabled = false;
+            return;
+        }
+
+        // Register student in firestore
+        const studentData = {
+            name: name,
+            studentName: name,
+            class: studentClass,
+            section: section,
+            rollNo: rollNumber,
+            rollNumber: rollNumber,
+            admissionNumber: admissionNo,
+            admissionNo: admissionNo,
+            phoneNumber: phone,
+            phone: phone,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        const docRef = await db.collection('students').add(studentData);
+        const registeredStudent = { id: docRef.id, ...studentData };
+
+        // Store student in sessionStorage
+        sessionStorage.setItem('studentUser', JSON.stringify(registeredStudent));
+
+        // Update Auth UI
+        initAuth();
+
+        // Hide modal
+        const modalEl = document.getElementById('studentLoginModal');
+        if (modalEl) {
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        }
+
+        // Reset form
+        document.getElementById('student-register-form').reset();
+        spinner.classList.add('d-none');
+        submitBtn.disabled = false;
+
+        // Reset Modal state back to login
+        resetStudentModalState();
+
+        // Proceed to start quiz if pending
+        if (pendingQuizId) {
+            const quizId = pendingQuizId;
+            pendingQuizId = null;
+            startQuiz(quizId);
+        }
+    } catch (error) {
+        console.error('Student registration error:', error);
+        errorDiv.textContent = 'An error occurred during registration: ' + error.message;
         errorDiv.classList.remove('d-none');
         spinner.classList.add('d-none');
         submitBtn.disabled = false;

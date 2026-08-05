@@ -281,25 +281,77 @@
                 <div class="modal-header">
                     <h5 class="modal-title">Student Authentication</h5>
                 </div>
-                <div class="modal-body">
-                    <div id="student-login-error" class="alert alert-danger d-none"></div>
+                
+                <!-- Student Login Form Section -->
+                <div id="student-login-section">
                     <form id="student-login-form">
-                        <div class="mb-3">
-                            <label for="student-admission" class="form-label">Admission Number</label>
-                            <input type="text" class="form-control" id="student-admission" placeholder="Enter Admission Number" required autocomplete="off">
+                        <div class="modal-body">
+                            <div id="student-login-error" class="alert alert-danger d-none"></div>
+                            <div class="mb-3">
+                                <label for="student-admission" class="form-label">Admission Number</label>
+                                <input type="text" class="form-control" id="student-admission" placeholder="Enter Admission Number" required autocomplete="off">
+                            </div>
+                            <div class="mb-3">
+                                <label for="student-phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="student-phone" placeholder="Enter Registered Phone Number" required autocomplete="off">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="student-phone" class="form-label">Phone Number</label>
-                            <input type="tel" class="form-control" id="student-phone" placeholder="Enter Registered Phone Number" required autocomplete="off">
+                        <div class="modal-footer d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-primary" id="student-toggle-to-register">Register</button>
+                            <div>
+                                <button type="button" class="btn btn-secondary" id="student-login-cancel">Cancel</button>
+                                <button type="submit" class="btn btn-primary" id="student-login-submit">
+                                    <span class="spinner-border spinner-border-sm d-none" id="student-login-spinner" role="status" aria-hidden="true"></span>
+                                    Verify & Start Test
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="student-login-cancel">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="student-login-submit">
-                        <span class="spinner-border spinner-border-sm d-none" id="student-login-spinner" role="status" aria-hidden="true"></span>
-                        Verify & Start Test
-                    </button>
+
+                <!-- Student Register Form Section -->
+                <div id="student-register-section" class="d-none">
+                    <form id="student-register-form">
+                        <div class="modal-body">
+                            <div id="student-register-error" class="alert alert-danger d-none"></div>
+                            <div class="mb-3">
+                                <label for="student-reg-name" class="form-label">Name</label>
+                                <input type="text" class="form-control" id="student-reg-name" placeholder="Enter Name" required autocomplete="off">
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6 mb-3 mb-md-0">
+                                    <label for="student-reg-class" class="form-label">Class</label>
+                                    <input type="text" class="form-control" id="student-reg-class" placeholder="Enter Class" required autocomplete="off">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="student-reg-section" class="form-label">Section</label>
+                                    <input type="text" class="form-control" id="student-reg-section" placeholder="Enter Section" required autocomplete="off">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="student-reg-roll" class="form-label">Roll Number</label>
+                                <input type="text" class="form-control" id="student-reg-roll" placeholder="Enter Roll Number" required autocomplete="off">
+                            </div>
+                            <div class="mb-3">
+                                <label for="student-reg-admission" class="form-label">Admission Number</label>
+                                <input type="text" class="form-control" id="student-reg-admission" placeholder="Enter Admission Number" required autocomplete="off">
+                            </div>
+                            <div class="mb-3">
+                                <label for="student-reg-phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="student-reg-phone" placeholder="Enter Phone Number" required autocomplete="off">
+                            </div>
+                        </div>
+                        <div class="modal-footer d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-primary" id="student-toggle-to-login">Back to Login</button>
+                            <div>
+                                <button type="button" class="btn btn-secondary" id="student-register-cancel">Cancel</button>
+                                <button type="submit" class="btn btn-primary" id="student-register-submit">
+                                    <span class="spinner-border spinner-border-sm d-none" id="student-register-spinner" role="status" aria-hidden="true"></span>
+                                    Register & Start Test
+                                </button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
