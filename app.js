@@ -34,6 +34,16 @@ function trackEvent(eventName, eventParams = {}) {
 }
 const urlParams = new URLSearchParams(window.location.search);
 const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
+const instantEvaluation = parseBooleanParam(urlParams.get('instantEvaluation'))
+    || parseBooleanParam(urlParams.get('instantQuestionEvaluation'))
+    || parseBooleanParam(urlParams.get('evaluateInstantly'))
+    || parseBooleanParam(urlParams.get('instant'))
+    || parseBooleanParam(urlParams.get('showEvaluation'));
+
+function parseBooleanParam(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
 
 // State Management
 const state = {
@@ -359,6 +369,70 @@ function shuffleArray(array) {
         [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
+}
+
+function getCorrectOptionIndex(question) {
+    for (let i = 1; i <= 4; i++) {
+        const opt = question[`Option ${i}`] || question[`option ${i}`];
+        if (opt && opt.correct === true) return i;
+    }
+    return null;
+}
+
+function getQuestionFeedbackHtml(question, index) {
+    const explanation = question.feedbackCorrectAnswer || question.FeedbackCorrectAnswer || question.feedback || '';
+    const roundData = state.roundAnswers[state.currentRound];
+    const selected = roundData ? roundData.answers[index] : undefined;
+    const correct = getCorrectOptionIndex(question);
+    let html = '';
+
+    if (instantEvaluation && selected !== undefined && correct !== null) {
+        const isCorrect = selected === correct;
+        html += `
+            <div class="alert ${isCorrect ? 'alert-success' : 'alert-danger'} mt-3 mb-0 quiz-instant-feedback">
+                <i class="bi ${isCorrect ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}"></i>
+                ${isCorrect ? 'Correct' : 'Wrong'}
+            </div>
+        `;
+    }
+
+    if (explanation) {
+        const feedbackId = `answer-feedback-${state.currentRound}-${index}`;
+        html += `
+            <div class="mt-3">
+                <button class="btn btn-sm btn-outline-info" type="button" data-bs-toggle="collapse" data-bs-target="#${feedbackId}" aria-expanded="false" aria-controls="${feedbackId}">
+                    <i class="bi bi-chat-left-text"></i> View Answer Explanation
+                </button>
+                <div class="collapse mt-2" id="${feedbackId}">
+                    <div class="alert alert-info mb-0">${escapeLatex(explanation)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    return html;
+}
+
+function getQuestionToolsHtml(index) {
+    const roundData = state.roundAnswers[state.currentRound];
+    const question = roundData && roundData.questions ? roundData.questions[index] : null;
+    return question ? getQuestionFeedbackHtml(question, index) : '';
+}
+
+function setQuizLoading(isLoading, message = 'Loading quiz...') {
+    const loadingEl = document.getElementById('quiz-loading');
+    const quizEl = document.getElementById('quiz-interface');
+    if (!loadingEl) return;
+
+    const messageEl = loadingEl.querySelector('[data-loading-message]');
+    if (messageEl) messageEl.textContent = message;
+
+    loadingEl.classList.toggle('d-none', !isLoading);
+    if (quizEl) quizEl.classList.toggle('d-none', isLoading);
+}
+
+function retakeQuiz() {
+    window.location.reload();
 }
 
 // LaTeX-aware escape function that preserves math delimiters
@@ -811,7 +885,7 @@ async function loadQuestionPapers() {
         [...lower.docs, ...upper.docs].forEach(doc => {
             if (!papers.has(doc.id)) {
                 const data = doc.data();
-                const questions = data.questions || data.Questions || [];
+                const questions = data.questions || data.Questions || ((data.Question || data.question) ? [data] : []);
                 papers.set(doc.id, {
                     id: doc.id,
                     collection: lower.docs.find(d => d.id === doc.id) ? 'questionpapers' : 'QuestionPapers',
@@ -1003,7 +1077,9 @@ function updateRoundsConfig() {
 
 // Start Quiz
 async function startQuiz(quizId) {
+    setQuizLoading(true, 'Loading quiz...');
     if (!state.currentUser && !sessionStorage.getItem('studentUser')) {
+        setQuizLoading(false);
         pendingQuizId = quizId;
         const modalEl = document.getElementById('studentLoginModal');
         if (modalEl) {
@@ -1037,12 +1113,14 @@ async function startQuiz(quizId) {
             startTimer(state.activeQuiz.timeLimit * 60);
         }
     } catch (error) {
+        setQuizLoading(false);
         trackEvent('quiz_start_failed', { 'quiz_id': quizId, 'error': error.message });
         alert('Failed to start quiz: ' + error.message);
     }
 }
 
 function startDirectQuiz(directQuizConfig) {
+    setQuizLoading(true, 'Loading questions...');
     const paperIds = directQuizConfig.paperIds;
     state.activeQuiz = {
         id: `direct-${paperIds.join('-')}`,
@@ -1066,7 +1144,7 @@ function startDirectQuiz(directQuizConfig) {
 
     trackEvent('direct_quiz_start', {
         'question_paper_ids': paperIds.join(','),
-        'num_questions': directQuizConfig.questionNumbers.length,
+        'num_questions': directQuizConfig.questionNumbers.length || 'all',
         'is_random': directQuizConfig.randomQuestions,
         'question_format': state.activeQuiz.questionFormat
     });
@@ -1126,7 +1204,7 @@ async function loadRound(roundNum) {
 
             if (paperDoc.exists) {
                 const data = paperDoc.data();
-                const questions = data.questions || data.Questions || [];
+                const questions = data.questions || data.Questions || ((data.Question || data.question) ? [data] : []);
                 allQuestions.push(...questions);
 
                 // Get PDF URL from first paper (fallback)
@@ -1140,6 +1218,7 @@ async function loadRound(roundNum) {
     }
 
     if (allQuestions.length === 0) {
+        setQuizLoading(false);
         alert('No questions found in selected papers. Please check the quiz configuration.');
         showView('homepage');
         return;
@@ -1244,6 +1323,7 @@ function navigateToQuestion(index) {
 
     currentQuestionIndex = index;
     const question = roundData.questions[index];
+    const correctOption = getCorrectOptionIndex(question);
 
     elements.questionsContainer.innerHTML = `
         <div class="question-card">
@@ -1258,14 +1338,18 @@ function navigateToQuestion(index) {
         if (showAnswersNoSubmit && opt.correct === true) {
             selected = true;
         }
+        const evaluationClass = instantEvaluation && roundData.answers[index] !== undefined
+            ? (i === correctOption ? 'is-correct' : (selected ? 'is-wrong' : ''))
+            : '';
         return `
-                        <div class="option-label ${selected ? 'selected' : ''}" onclick="selectOption(${index}, ${i})">
+                        <div class="option-label ${selected ? 'selected' : ''} ${evaluationClass}" onclick="selectOption(${index}, ${i})">
                             <div class="option-marker">${String.fromCharCode(64 + i)}</div>
                             <div>${escapeLatex(optionText)}</div>
                         </div>
                     `;
     }).join('')}
             </div>
+            ${getQuestionFeedbackHtml(question, index)}
         </div>
     `;
 
@@ -1279,6 +1363,8 @@ function navigateToQuestion(index) {
         el.classList.toggle('active', i === index);
         el.classList.toggle('answered', roundData.answers[i] !== undefined);
     });
+
+    setQuizLoading(false);
 }
 
 function selectOption(qIndex, optIndex) {
@@ -1344,6 +1430,7 @@ if (elements.submitRoundBtn) {
 function submitQuiz() {
     clearInterval(state.timerInterval);
     state.quizInProgress = false;
+    state.retakeOnResultsClose = true;
 
     const report = generateReport();
     const avgScore = report.rounds.reduce((sum, r) => sum + parseFloat(r.percentage || 0), 0) / report.rounds.length;
@@ -1529,6 +1616,8 @@ function checkUrlParameters() {
         loadQuizFromUrl(quizId, otp);
     } else if (directQuizConfig) {
         startDirectQuiz(directQuizConfig);
+    } else if (document.getElementById('quiz-loading')) {
+        setQuizLoading(true, 'Quiz link is missing question parameters.');
     }
 }
 
@@ -1822,6 +1911,20 @@ function showUrlDialog(url) {
 // Download and Share Results
 let currentReport = null;
 
+const retakeQuizBtn = document.getElementById('retake-quiz-btn');
+if (retakeQuizBtn) {
+    retakeQuizBtn.addEventListener('click', retakeQuiz);
+}
+
+const resultsModalEl = document.getElementById('resultsModal');
+if (resultsModalEl) {
+    resultsModalEl.addEventListener('hidden.bs.modal', () => {
+        if (state.retakeOnResultsClose) {
+            retakeQuiz();
+        }
+    });
+}
+
 function showResults(report) {
     currentReport = report;
     const totalTime = report.totalTime || 0;
@@ -1918,7 +2021,8 @@ function showResults(report) {
 }
 
 // Download Result as Image
-document.getElementById('download-result-btn').addEventListener('click', async () => {
+const downloadResultBtn = document.getElementById('download-result-btn');
+if (downloadResultBtn) downloadResultBtn.addEventListener('click', async () => {
     if (!currentReport) return;
     trackEvent('result_download', { 'quiz_title': currentReport.quizTitle });
 
@@ -2011,7 +2115,8 @@ document.getElementById('download-result-btn').addEventListener('click', async (
 });
 
 // Share Result
-document.getElementById('share-result-btn').addEventListener('click', async () => {
+const shareResultBtn = document.getElementById('share-result-btn');
+if (shareResultBtn) shareResultBtn.addEventListener('click', async () => {
     if (!currentReport) return;
     trackEvent('result_share', { 'quiz_title': currentReport.quizTitle });
 
@@ -2105,12 +2210,15 @@ function buildDirectQuizUrl() {
     params.set('questionFormat', (window.qfGetSelectedQuizFormat && window.qfGetSelectedQuizFormat()) || 'classic');
     params.set('questionNumbers', buildQuestionNumbersParam(document.getElementById('num-questions').value));
 
+    const openBookEl = document.getElementById('openbook-1');
+    params.set('openBook', openBookEl && openBookEl.checked ? 'true' : 'false');
+
     const targetClassEl = document.getElementById('quiz-target-class');
     if (targetClassEl && targetClassEl.value) {
         params.set('targetClass', targetClassEl.value);
     }
 
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    return `${getQuizPageUrl()}?${params.toString()}`;
 }
 
 async function copyTextToClipboard(text) {
@@ -2146,7 +2254,8 @@ if (copyQuizUrlBtn) {
 }
 
 // Update save quiz to include privacy and reference settings
-document.getElementById('save-quiz-btn').addEventListener('click', async () => {
+const saveQuizBtn = document.getElementById('save-quiz-btn');
+if (saveQuizBtn) saveQuizBtn.addEventListener('click', async () => {
     if (!state.currentUser) {
         alert('Please login to create quizzes');
         return;

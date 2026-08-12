@@ -28,6 +28,13 @@
     <link rel="stylesheet" href="quiz-formats.css">
 </head>
 <body>
+    <div id="quiz-loading" class="quiz-loading">
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+            <div class="fw-semibold" data-loading-message>Loading quiz...</div>
+        </div>
+    </div>
+
     <!-- Auth Section (shared with index) -->
     <div id="auth-section" class="position-fixed top-0 end-0 p-3 hidden" style="z-index: 1000;">
         <div id="user-info" class="d-none">
@@ -43,7 +50,7 @@
     </div>
 
     <!-- Quiz Interface (core for taking a quiz) -->
-    <div id="quiz-interface" class="container-fluid py-3">
+    <div id="quiz-interface" class="container-fluid py-3 d-none">
         <div class="alert alert-warning hidden" id="round-indicator"></div>
         <div class="row g-3">
             <div class="col-lg-6" id="questions-section">
@@ -135,6 +142,7 @@
                 </div>
                 <div class="modal-body" id="results-content"></div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" id="retake-quiz-btn"><i class="bi bi-arrow-clockwise"></i> Retake Quiz</button>
                     <button type="button" class="btn btn-success" id="download-result-btn"><i class="bi bi-download"></i> Download Result</button>
                     <button type="button" class="btn btn-info" id="share-result-btn"><i class="bi bi-share"></i> Share</button>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>

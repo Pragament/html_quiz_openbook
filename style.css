@@ -78,6 +78,40 @@ body {
     font-weight: 500;
 }
 
+.option-label.is-correct {
+    background-color: #ecfdf5;
+    border-color: var(--success-color);
+    color: #047857;
+    font-weight: 600;
+}
+
+.option-label.is-correct .option-marker {
+    border-color: var(--success-color);
+    background: var(--success-color);
+    color: white;
+}
+
+.option-label.is-wrong {
+    background-color: #fef2f2;
+    border-color: var(--danger-color);
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+.option-label.is-wrong .option-marker {
+    border-color: var(--danger-color);
+    background: var(--danger-color);
+    color: white;
+}
+
+.quiz-loading {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-color);
+}
+
 .option-marker {
     width: 28px;
     height: 28px;

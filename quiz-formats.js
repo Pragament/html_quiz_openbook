@@ -60,22 +60,22 @@
     // LaTeX-aware escape function that preserves math delimiters
     function qfEscapeLatex(value) {
         // First, protect LaTeX patterns by temporarily replacing them
-        var protected = String(value == null ? '' : value);
+        var protectedText = String(value == null ? '' : value);
         
         // Protect inline math $...$
-        protected = protected.replace(/\$([^$]+)\$/g, '___MATH_INLINE_START___$1___MATH_INLINE_END___');
+        protectedText = protectedText.replace(/\$([^$]+)\$/g, '___MATH_INLINE_START___$1___MATH_INLINE_END___');
         
         // Protect display math $$...$$
-        protected = protected.replace(/\$\$([^$]+)\$\$/g, '___MATH_DISPLAY_START___$1___MATH_DISPLAY_END___');
+        protectedText = protectedText.replace(/\$\$([^$]+)\$\$/g, '___MATH_DISPLAY_START___$1___MATH_DISPLAY_END___');
         
         // Protect \(...\)
-        protected = protected.replace(/\\\(([^)]+)\\\)/g, '___MATH_PAREN_START___$1___MATH_PAREN_END___');
+        protectedText = protectedText.replace(/\\\(([^)]+)\\\)/g, '___MATH_PAREN_START___$1___MATH_PAREN_END___');
         
         // Protect \[...\]
-        protected = protected.replace(/\\\[([^\]]+)\\\]/g, '___MATH_BRACKET_START___$1___MATH_BRACKET_END___');
+        protectedText = protectedText.replace(/\\\[([^\]]+)\\\]/g, '___MATH_BRACKET_START___$1___MATH_BRACKET_END___');
         
         // Now escape HTML
-        protected = protected
+        protectedText = protectedText
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -83,16 +83,16 @@
             .replace(/'/g, '&#39;');
         
         // Restore LaTeX patterns
-        protected = protected.replace(/___MATH_INLINE_START___/g, '$');
-        protected = protected.replace(/___MATH_INLINE_END___/g, '$');
-        protected = protected.replace(/___MATH_DISPLAY_START___/g, '$$');
-        protected = protected.replace(/___MATH_DISPLAY_END___/g, '$$');
-        protected = protected.replace(/___MATH_PAREN_START___/g, '\\(');
-        protected = protected.replace(/___MATH_PAREN_END___/g, '\\)');
-        protected = protected.replace(/___MATH_BRACKET_START___/g, '\\[');
-        protected = protected.replace(/___MATH_BRACKET_END___/g, '\\]');
+        protectedText = protectedText.replace(/___MATH_INLINE_START___/g, '$');
+        protectedText = protectedText.replace(/___MATH_INLINE_END___/g, '$');
+        protectedText = protectedText.replace(/___MATH_DISPLAY_START___/g, '$$');
+        protectedText = protectedText.replace(/___MATH_DISPLAY_END___/g, '$$');
+        protectedText = protectedText.replace(/___MATH_PAREN_START___/g, '\\(');
+        protectedText = protectedText.replace(/___MATH_PAREN_END___/g, '\\)');
+        protectedText = protectedText.replace(/___MATH_BRACKET_START___/g, '\\[');
+        protectedText = protectedText.replace(/___MATH_BRACKET_END___/g, '\\]');
         
-        return protected;
+        return protectedText;
     }
 
     // Stable 32-bit hash. Every "random" choice here is derived from the
@@ -287,6 +287,10 @@
     // ---------------------------------------------------------- shared shell
 
     function qfShell(index, renderer, nq, bodyHtml) {
+        var toolsHtml = typeof window.getQuestionToolsHtml === 'function'
+            ? window.getQuestionToolsHtml(index)
+            : '';
+
         return ''
             + '<div class="question-card qf-card" data-qf-format="' + qfEscape(renderer.id) + '">'
             + '  <div class="qf-head">'
@@ -300,6 +304,7 @@
             + '  <p class="qf-instruction"><i class="bi bi-info-circle"></i> '
             + qfEscape(renderer.instruction) + '</p>'
             + bodyHtml
+            + toolsHtml
             + '</div>';
     }
 
