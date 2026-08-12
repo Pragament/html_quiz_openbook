@@ -1118,6 +1118,10 @@ async function loadRound(roundNum) {
         allQuestions = shuffleArray(allQuestions);
     }
 
+    // If numQuestions is 0 (meaning no specific limit), use all available questions
+    if (state.activeQuiz.numQuestions === 0) {
+        state.activeQuiz.numQuestions = allQuestions.length;
+    }
     // Limit to configured number of questions
     const selectedQuestions = allQuestions.slice(0, state.activeQuiz.numQuestions);
 
@@ -1497,7 +1501,6 @@ function getDirectQuizConfigFromUrl(urlParams) {
     if (paperIds.length === 0) return null;
 
     const questionNumbers = parseQuestionNumbers(urlParams.get('questionNumbers'));
-    if (questionNumbers.length === 0) return null;
 
     const randomValue = String(urlParams.get('randomQuestions') || '').toLowerCase();
     const randomQuestions = randomValue === 'true' || randomValue === '1' || randomValue === 'yes';
