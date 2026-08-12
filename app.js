@@ -361,6 +361,44 @@ function shuffleArray(array) {
     return arr;
 }
 
+// LaTeX-aware escape function that preserves math delimiters
+function escapeLatex(value) {
+    if (value == null) return '';
+    let protected = String(value);
+    
+    // Protect inline math $...$
+    protected = protected.replace(/\$([^$]+)\$/g, '___MATH_INLINE_START___$1___MATH_INLINE_END___');
+    
+    // Protect display math $$...$$
+    protected = protected.replace(/\$\$([^$]+)\$\$/g, '___MATH_DISPLAY_START___$1___MATH_DISPLAY_END___');
+    
+    // Protect \(...\)
+    protected = protected.replace(/\\\(([^)]+)\\\)/g, '___MATH_PAREN_START___$1___MATH_PAREN_END___');
+    
+    // Protect \[...\]
+    protected = protected.replace(/\\\[([^\]]+)\\\]/g, '___MATH_BRACKET_START___$1___MATH_BRACKET_END___');
+    
+    // Now escape HTML
+    protected = protected
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    
+    // Restore LaTeX patterns
+    protected = protected.replace(/___MATH_INLINE_START___/g, '$');
+    protected = protected.replace(/___MATH_INLINE_END___/g, '$');
+    protected = protected.replace(/___MATH_DISPLAY_START___/g, '$$');
+    protected = protected.replace(/___MATH_DISPLAY_END___/g, '$$');
+    protected = protected.replace(/___MATH_PAREN_START___/g, '\\(');
+    protected = protected.replace(/___MATH_PAREN_END___/g, '\\)');
+    protected = protected.replace(/___MATH_BRACKET_START___/g, '\\[');
+    protected = protected.replace(/___MATH_BRACKET_END___/g, '\\]');
+    
+    return protected;
+}
+
 // Timer Function
 function startTimer(seconds) {
     let remaining = seconds;
@@ -1210,7 +1248,7 @@ function navigateToQuestion(index) {
     elements.questionsContainer.innerHTML = `
         <div class="question-card">
             <h5>Question ${index + 1}</h5>
-            <p class="fs-5">${question.Question || question.question}</p>
+            <p class="fs-5">${escapeLatex(question.Question || question.question)}</p>
             <div class="options">
                 ${[1, 2, 3, 4].map(i => {
         const opt = question[`Option ${i}`] || question[`option ${i}`];
@@ -1223,7 +1261,7 @@ function navigateToQuestion(index) {
         return `
                         <div class="option-label ${selected ? 'selected' : ''}" onclick="selectOption(${index}, ${i})">
                             <div class="option-marker">${String.fromCharCode(64 + i)}</div>
-                            <div>${optionText}</div>
+                            <div>${escapeLatex(optionText)}</div>
                         </div>
                     `;
     }).join('')}
