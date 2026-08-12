@@ -1216,7 +1216,7 @@ function navigateToQuestion(index) {
         const opt = question[`Option ${i}`] || question[`option ${i}`];
         if (!opt) return '';
         const optionText = opt.optionText;
-        selected = roundData.answers[index] === i;
+        let selected = roundData.answers[index] === i;
         if (showAnswersNoSubmit && opt.correct === true) {
             selected = true;
         }
@@ -1230,6 +1230,11 @@ function navigateToQuestion(index) {
             </div>
         </div>
     `;
+
+    // Render MathJax for math expressions
+    if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([elements.questionsContainer]).catch((err) => console.log('MathJax error:', err));
+    }
 
     updateProgress();
     document.querySelectorAll('.question-number').forEach((el, i) => {

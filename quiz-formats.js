@@ -57,6 +57,44 @@
             .replace(/'/g, '&#39;');
     }
 
+    // LaTeX-aware escape function that preserves math delimiters
+    function qfEscapeLatex(value) {
+        // First, protect LaTeX patterns by temporarily replacing them
+        var protected = String(value == null ? '' : value);
+        
+        // Protect inline math $...$
+        protected = protected.replace(/\$([^$]+)\$/g, '___MATH_INLINE_START___$1___MATH_INLINE_END___');
+        
+        // Protect display math $$...$$
+        protected = protected.replace(/\$\$([^$]+)\$\$/g, '___MATH_DISPLAY_START___$1___MATH_DISPLAY_END___');
+        
+        // Protect \(...\)
+        protected = protected.replace(/\\\(([^)]+)\\\)/g, '___MATH_PAREN_START___$1___MATH_PAREN_END___');
+        
+        // Protect \[...\]
+        protected = protected.replace(/\\\[([^\]]+)\\\]/g, '___MATH_BRACKET_START___$1___MATH_BRACKET_END___');
+        
+        // Now escape HTML
+        protected = protected
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        
+        // Restore LaTeX patterns
+        protected = protected.replace(/___MATH_INLINE_START___/g, '$');
+        protected = protected.replace(/___MATH_INLINE_END___/g, '$');
+        protected = protected.replace(/___MATH_DISPLAY_START___/g, '$$');
+        protected = protected.replace(/___MATH_DISPLAY_END___/g, '$$');
+        protected = protected.replace(/___MATH_PAREN_START___/g, '\\(');
+        protected = protected.replace(/___MATH_PAREN_END___/g, '\\)');
+        protected = protected.replace(/___MATH_BRACKET_START___/g, '\\[');
+        protected = protected.replace(/___MATH_BRACKET_END___/g, '\\]');
+        
+        return protected;
+    }
+
     // Stable 32-bit hash. Every "random" choice here is derived from the
     // question index through this, so a question keeps the same format, the
     // same chip order and the same true/false statement across re-renders.
@@ -258,7 +296,7 @@
             + '      <i class="bi bi-list-ul"></i> Classic view</button>'
             + '  </div>'
             + '  <h5 class="qf-qnum">Question ' + (index + 1) + '</h5>'
-            + '  <p class="qf-stem">' + qfEscape(nq.text) + '</p>'
+            + '  <p class="qf-stem">' + qfEscapeLatex(nq.text) + '</p>'
             + '  <p class="qf-instruction"><i class="bi bi-info-circle"></i> '
             + qfEscape(renderer.instruction) + '</p>'
             + bodyHtml
@@ -296,7 +334,7 @@
 
                 var back = ''
                     + '<div class="qf-face qf-face-back">'
-                    + '  <span class="qf-flip-text">' + qfEscape(opt.text) + '</span>';
+                    + '  <span class="qf-flip-text">' + qfEscapeLatex(opt.text) + '</span>';
 
                 if (qfReveal) {
                     back += isKey
@@ -390,7 +428,7 @@
                 zoneInner = ''
                     + '<span class="qf-chip is-placed">'
                     + '  <span class="qf-chip-letter">' + qfLetter(byIdx[placed].pos) + '</span>'
-                    + '  <span class="qf-chip-text">' + qfEscape(byIdx[placed].opt.text) + '</span>'
+                    + '  <span class="qf-chip-text">' + qfEscapeLatex(byIdx[placed].opt.text) + '</span>'
                     + (qfReveal ? ''
                         : '  <button type="button" class="qf-chip-x" data-action="unplace"'
                         + '          aria-label="Remove this answer">&times;</button>')
@@ -409,7 +447,7 @@
                     + '<button type="button" class="qf-chip' + (isPicked ? ' is-picked' : '') + '"'
                     + '        data-action="pick" data-drag data-opt="' + idx + '">'
                     + '  <span class="qf-chip-letter">' + qfLetter(entry.pos) + '</span>'
-                    + '  <span class="qf-chip-text">' + qfEscape(entry.opt.text) + '</span>'
+                    + '  <span class="qf-chip-text">' + qfEscapeLatex(entry.opt.text) + '</span>'
                     + '</button>';
             }).join('');
 
@@ -564,7 +602,7 @@
             return ''
                 + '<div class="qf-tf-statement">'
                 + '  <span class="qf-tf-lead">Is this the correct answer?</span>'
-                + '  <span class="qf-tf-claim">' + qfEscape(shownOpt.text) + '</span>'
+                + '  <span class="qf-tf-claim">' + qfEscapeLatex(shownOpt.text) + '</span>'
                 + '</div>'
                 + '<div class="qf-tf-grid">'
                 + qfTfButton('true', 'True', pressedTrue, qfReveal && truthIsTrue, trueValue)
@@ -636,6 +674,11 @@
         // half-written markup on screen.
         var html = qfShell(index, renderer, nq, renderer.body(index, nq, raw));
         container.innerHTML = html;
+
+        // Render MathJax for math expressions
+        if (window.MathJax && window.MathJax.typesetPromise) {
+            window.MathJax.typesetPromise([container]).catch((err) => console.log('MathJax error:', err));
+        }
     }
 
     function qfRepaint(index) {
