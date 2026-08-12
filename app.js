@@ -1338,8 +1338,8 @@ function navigateToQuestion(index) {
         if (showAnswersNoSubmit && opt.correct === true) {
             selected = true;
         }
-        const evaluationClass = instantEvaluation && roundData.answers[index] !== undefined
-            ? (i === correctOption ? 'is-correct' : (selected ? 'is-wrong' : ''))
+        const evaluationClass = instantEvaluation && selected
+            ? (i === correctOption ? 'is-correct' : 'is-wrong')
             : '';
         return `
                         <div class="option-label ${selected ? 'selected' : ''} ${evaluationClass}" onclick="selectOption(${index}, ${i})">
