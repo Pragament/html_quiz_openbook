@@ -22,7 +22,7 @@
                 <button id="logout-btn" class="btn btn-sm btn-outline-danger">Logout</button>
             </div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 hidden">
             <button id="login-btn" class="btn btn-primary"><i class="bi bi-google"></i> Login with Google</button>
             <button id="student-login-btn" class="btn btn-outline-primary bg-white"><i class="bi bi-person-fill"></i> Student Login</button>
         </div>
@@ -30,11 +30,11 @@
 
     <!-- Quiz Interface (core for taking a quiz) -->
     <div id="quiz-interface" class="container-fluid py-3">
-        <div class="alert alert-warning" id="round-indicator"></div>
+        <div class="alert alert-warning hidden" id="round-indicator"></div>
         <div class="row g-3">
             <div class="col-lg-6" id="questions-section">
                 <div class="glass-card h-100 d-flex flex-column" style="max-height: calc(100vh - 100px);">
-                    <div class="p-3 border-bottom">
+                    <div class="p-3 border-bottom hidden">
                         <div class="d-flex justify-content-between">
                             <h5 class="text-primary fw-bold" id="quiz-title-display"></h5>
                             <div class="d-flex align-items-center gap-3">

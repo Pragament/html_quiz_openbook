@@ -1021,7 +1021,7 @@ function startDirectQuiz(directQuizConfig) {
         questionNumbers: directQuizConfig.questionNumbers,
         rounds: [{
             papers: paperIds,
-            openBook: true,
+            openBook: directQuizConfig.openBook !== undefined ? directQuizConfig.openBook : true,
             referenceConfig: null
         }]
     };
@@ -1505,12 +1505,16 @@ function getDirectQuizConfigFromUrl(urlParams) {
     const randomValue = String(urlParams.get('randomQuestions') || '').toLowerCase();
     const randomQuestions = randomValue === 'true' || randomValue === '1' || randomValue === 'yes';
 
+    const openBookValue = String(urlParams.get('openBook') || '').toLowerCase();
+    const openBook = openBookValue === 'true' || openBookValue === '1' || openBookValue === 'yes';
+
     return {
         paperIds,
         randomQuestions,
         questionFormat: urlParams.get('questionFormat') || urlParams.get('format') || 'classic',
         questionNumbers,
-        targetClass: urlParams.get('targetClass') || ''
+        targetClass: urlParams.get('targetClass') || '',
+        openBook
     };
 }
 
