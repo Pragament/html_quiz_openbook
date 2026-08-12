@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkUrlParameters();
     initAuth();
     initEventListeners();
-    loadQuizzes();
+    if (elements.quizzesList) loadQuizzes();
     loadQuestionPapers();
     preventNavigation();
 });
@@ -286,19 +286,19 @@ function preventNavigation() {
 // View Management
 function showView(view) {
     trackEvent('view_change', { 'view_name': view });
-    elements.homepage.classList.add('d-none');
-    elements.quizInterface.classList.add('d-none');
-    elements.reportsView.classList.add('d-none');
-    elements.myQuizzesView.classList.add('d-none');
+    if (elements.homepage) elements.homepage.classList.add('d-none');
+    if (elements.quizInterface) elements.quizInterface.classList.add('d-none');
+    if (elements.reportsView) elements.reportsView.classList.add('d-none');
+    if (elements.myQuizzesView) elements.myQuizzesView.classList.add('d-none');
 
     if (view === 'homepage') {
-        elements.homepage.classList.remove('d-none');
+        if (elements.homepage) elements.homepage.classList.remove('d-none');
     } else if (view === 'quiz') {
-        elements.quizInterface.classList.remove('d-none');
+        if (elements.quizInterface) elements.quizInterface.classList.remove('d-none');
     } else if (view === 'reports') {
-        elements.reportsView.classList.remove('d-none');
+        if (elements.reportsView) elements.reportsView.classList.remove('d-none');
     } else if (view === 'my-quizzes') {
-        elements.myQuizzesView.classList.remove('d-none');
+        if (elements.myQuizzesView) elements.myQuizzesView.classList.remove('d-none');
     }
 }
 
@@ -333,19 +333,23 @@ async function renderPdfPage(num) {
     }
 }
 
-elements.prevPage.addEventListener('click', () => {
-    if (state.currentPdfPage > 1) {
-        trackEvent('pdf_page_prev', { 'current_page': state.currentPdfPage });
-        renderPdfPage(state.currentPdfPage - 1);
-    }
-});
+if (elements.prevPage) {
+    elements.prevPage.addEventListener('click', () => {
+        if (state.currentPdfPage > 1) {
+            trackEvent('pdf_page_prev', { 'current_page': state.currentPdfPage });
+            renderPdfPage(state.currentPdfPage - 1);
+        }
+    });
+}
 
-elements.nextPage.addEventListener('click', () => {
-    if (state.pdfDocument && state.currentPdfPage < state.pdfDocument.numPages) {
-        trackEvent('pdf_page_next', { 'current_page': state.currentPdfPage });
-        renderPdfPage(state.currentPdfPage + 1);
-    }
-});
+if (elements.nextPage) {
+    elements.nextPage.addEventListener('click', () => {
+        if (state.pdfDocument && state.currentPdfPage < state.pdfDocument.numPages) {
+            trackEvent('pdf_page_next', { 'current_page': state.currentPdfPage });
+            renderPdfPage(state.currentPdfPage + 1);
+        }
+    });
+}
 
 // Utility Functions
 function shuffleArray(array) {
@@ -702,6 +706,8 @@ async function saveReportToFirestore(report) {
 
 // Load Quizzes
 async function loadQuizzes() {
+    if (!elements.quizzesList) return;
+
     elements.quizzesList.innerHTML = '<div class="col-12 text-center"><div class="spinner-border"></div></div>';
     try {
         const snapshot = await db.collection('quizzes').where('isPrivate', '==', false).get();
@@ -839,12 +845,14 @@ function populateClassDropdowns() {
 }
 
 // Create Quiz
-elements.createQuizBtn.addEventListener('click', () => {
-    trackEvent('create_quiz_clicked');
-    const modal = new bootstrap.Modal(document.getElementById('createQuizModal'));
-    modal.show();
-    updateRoundsConfig();
-});
+if (elements.createQuizBtn) {
+    elements.createQuizBtn.addEventListener('click', () => {
+        trackEvent('create_quiz_clicked');
+        const modal = new bootstrap.Modal(document.getElementById('createQuizModal'));
+        modal.show();
+        updateRoundsConfig();
+    });
+}
 
 const numRoundsEl = document.getElementById('num-rounds');
 if (numRoundsEl) numRoundsEl.addEventListener('change', updateRoundsConfig);
@@ -996,6 +1004,43 @@ async function startQuiz(quizId) {
     }
 }
 
+function startDirectQuiz(directQuizConfig) {
+    const paperIds = directQuizConfig.paperIds;
+    state.activeQuiz = {
+        id: `direct-${paperIds.join('-')}`,
+        title: 'Direct Quiz',
+        isDirectUrl: true,
+        targetClass: directQuizConfig.targetClass || '',
+        isPrivate: false,
+        numRounds: 1,
+        numQuestions: directQuizConfig.questionNumbers.length,
+        randomQuestions: directQuizConfig.randomQuestions,
+        timeLimitEnabled: false,
+        timeLimit: 0,
+        questionFormat: directQuizConfig.questionFormat || 'classic',
+        questionNumbers: directQuizConfig.questionNumbers,
+        rounds: [{
+            papers: paperIds,
+            openBook: true,
+            referenceConfig: null
+        }]
+    };
+
+    trackEvent('direct_quiz_start', {
+        'question_paper_ids': paperIds.join(','),
+        'num_questions': directQuizConfig.questionNumbers.length,
+        'is_random': directQuizConfig.randomQuestions,
+        'question_format': state.activeQuiz.questionFormat
+    });
+
+    state.currentRound = 1;
+    state.roundAnswers = {};
+    state.quizInProgress = true;
+    state.quizStartTime = Date.now();
+
+    loadRound(1).then(() => showView('quiz'));
+}
+
 async function loadRound(roundNum) {
     state.currentRound = roundNum;
     const round = state.activeQuiz.rounds[roundNum - 1];
@@ -1060,6 +1105,12 @@ async function loadRound(roundNum) {
         alert('No questions found in selected papers. Please check the quiz configuration.');
         showView('homepage');
         return;
+    }
+
+    if (Array.isArray(state.activeQuiz.questionNumbers) && state.activeQuiz.questionNumbers.length > 0) {
+        allQuestions = state.activeQuiz.questionNumbers
+            .map(questionNumber => allQuestions[questionNumber - 1])
+            .filter(Boolean);
     }
 
     // Randomize if enabled
@@ -1203,38 +1254,45 @@ function updateProgress() {
     elements.progressText.textContent = `${answered}/${total}`;
 }
 
-elements.prevBtn.addEventListener('click', () => navigateToQuestion(currentQuestionIndex - 1));
-elements.nextBtn.addEventListener('click', () => navigateToQuestion(currentQuestionIndex + 1));
+if (elements.prevBtn) {
+    elements.prevBtn.addEventListener('click', () => navigateToQuestion(currentQuestionIndex - 1));
+}
 
-elements.submitRoundBtn.addEventListener('click', async () => {
-    const roundData = state.roundAnswers[state.currentRound];
-    const answered = Object.keys(roundData.answers).length;
-    const total = roundData.questions.length;
+if (elements.nextBtn) {
+    elements.nextBtn.addEventListener('click', () => navigateToQuestion(currentQuestionIndex + 1));
+}
 
-    if (answered < total) {
-        const unanswered = total - answered;
-        if (!confirm(`You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway?`)) {
-            return;
+if (elements.submitRoundBtn) {
+    elements.submitRoundBtn.addEventListener('click', async () => {
+        const roundData = state.roundAnswers[state.currentRound];
+        const answered = Object.keys(roundData.answers).length;
+        const total = roundData.questions.length;
+
+        if (answered < total) {
+            const unanswered = total - answered;
+            if (!confirm(`You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. Submit anyway?`)) {
+                return;
+            }
         }
-    }
 
-    trackEvent('round_submit', {
-        'quiz_id': state.activeQuiz.id,
-        'round_number': state.currentRound,
-        'questions_answered': answered,
-        'total_questions': total
+        trackEvent('round_submit', {
+            'quiz_id': state.activeQuiz.id,
+            'round_number': state.currentRound,
+            'questions_answered': answered,
+            'total_questions': total
+        });
+
+        if (state.currentRound < state.activeQuiz.numRounds) {
+            if (confirm(`Submit Round ${state.currentRound} and move to Round ${state.currentRound + 1}?`)) {
+                await loadRound(state.currentRound + 1);
+            }
+        } else {
+            if (confirm('Submit quiz and view results?')) {
+                submitQuiz();
+            }
+        }
     });
-
-    if (state.currentRound < state.activeQuiz.numRounds) {
-        if (confirm(`Submit Round ${state.currentRound} and move to Round ${state.currentRound + 1}?`)) {
-            await loadRound(state.currentRound + 1);
-        }
-    } else {
-        if (confirm('Submit quiz and view results?')) {
-            submitQuiz();
-        }
-    }
-});
+}
 
 function submitQuiz() {
     clearInterval(state.timerInterval);
@@ -1252,7 +1310,7 @@ function submitQuiz() {
     });
 
     saveReport(report);
-    if (sessionStorage.getItem('studentUser')) {
+    if (sessionStorage.getItem('studentUser') && !state.activeQuiz.isDirectUrl) {
         saveReportToFirestore(report);
     }
     showResults(report);
@@ -1338,13 +1396,23 @@ function saveReport(report) {
     localStorage.setItem('quizReports', JSON.stringify(reports));
 }
 
+function getQuizPageUrl() {
+    const path = window.location.pathname;
+    const quizPath = path.endsWith('/')
+        ? `${path}quiz.html`
+        : path.replace(/[^/]*$/, 'quiz.html');
+
+    return `${window.location.origin}${quizPath}`;
+}
+
 // View Reports
-elements.viewReportsBtn.addEventListener('click', () => {
+if (elements.viewReportsBtn) elements.viewReportsBtn.addEventListener('click', () => {
     trackEvent('view_reports_clicked', {
         'reports_count': JSON.parse(localStorage.getItem('quizReports') || '[]').length
     });
     const reports = JSON.parse(localStorage.getItem('quizReports') || '[]');
     const list = document.getElementById('reports-list');
+    if (!list) return;
 
     if (reports.length === 0) {
         list.innerHTML = '<p class="text-muted">No reports available. Complete a quiz to see your progress reports here.</p>';
@@ -1395,13 +1463,16 @@ function viewReportByData(button) {
     showResults(report);
 }
 
-elements.backToHome.addEventListener('click', () => showView('homepage'));
+if (elements.backToHome) {
+    elements.backToHome.addEventListener('click', () => showView('homepage'));
+}
 
 // URL Parameter Handling
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const quizId = urlParams.get('quiz');
     const otp = urlParams.get('otp');
+    const directQuizConfig = getDirectQuizConfigFromUrl(urlParams);
     const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
     if (showAnswersNoSubmit) {
         document.getElementById('submit-round-btn').style.display = 'none';
@@ -1409,7 +1480,35 @@ function checkUrlParameters() {
 
     if (quizId) {
         loadQuizFromUrl(quizId, otp);
+    } else if (directQuizConfig) {
+        startDirectQuiz(directQuizConfig);
     }
+}
+
+function getDirectQuizConfigFromUrl(urlParams) {
+    const paperParam = urlParams.get('questionPaperId') || urlParams.get('questionPaperIds');
+    if (!paperParam) return null;
+
+    const paperIds = paperParam
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean);
+
+    if (paperIds.length === 0) return null;
+
+    const questionNumbers = parseQuestionNumbers(urlParams.get('questionNumbers'));
+    if (questionNumbers.length === 0) return null;
+
+    const randomValue = String(urlParams.get('randomQuestions') || '').toLowerCase();
+    const randomQuestions = randomValue === 'true' || randomValue === '1' || randomValue === 'yes';
+
+    return {
+        paperIds,
+        randomQuestions,
+        questionFormat: urlParams.get('questionFormat') || urlParams.get('format') || 'classic',
+        questionNumbers,
+        targetClass: urlParams.get('targetClass') || ''
+    };
 }
 
 async function loadQuizFromUrl(quizId, otp) {
@@ -1503,7 +1602,7 @@ async function verifyOtp(quizId, otp) {
 }
 
 // My Quizzes View
-elements.myQuizzesBtn.addEventListener('click', async () => {
+if (elements.myQuizzesBtn) elements.myQuizzesBtn.addEventListener('click', async () => {
     if (!state.currentUser) {
         alert('Please login to view your quizzes');
         return;
@@ -1525,7 +1624,7 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
         } else {
             list.innerHTML = await Promise.all(myQuizzes.map(async quiz => {
                 const createdAt = quiz.createdAt ? new Date(quiz.createdAt.toDate()).toLocaleDateString() : '';
-                const quizUrl = `${window.location.origin}${window.location.pathname}?quiz=${quiz.id}`;
+                const quizUrl = `${getQuizPageUrl()}?quiz=${quiz.id}`;
 
                 let otpSection = '';
                 if (quiz.isPrivate) {
@@ -1597,7 +1696,9 @@ elements.myQuizzesBtn.addEventListener('click', async () => {
     }
 });
 
-elements.backToHomeFromQuizzes.addEventListener('click', () => showView('homepage'));
+if (elements.backToHomeFromQuizzes) {
+    elements.backToHomeFromQuizzes.addEventListener('click', () => showView('homepage'));
+}
 
 async function generateOtp(quizId) {
     if (!state.currentUser) {
@@ -1616,7 +1717,7 @@ async function generateOtp(quizId) {
             used: false
         });
 
-        alert(`OTP Generated: ${otp}\n\nShare this URL:\n${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`);
+        alert(`OTP Generated: ${otp}\n\nShare this URL:\n${getQuizPageUrl()}?quiz=${quizId}&otp=${otp}`);
 
         // Refresh the quiz list
         elements.myQuizzesBtn.click();
@@ -1633,7 +1734,7 @@ function copyQuizUrl(quizId) {
 }
 
 function shareOtpUrl(quizId, otp) {
-    const url = `${window.location.origin}${window.location.pathname}?quiz=${quizId}&otp=${otp}`;
+    const url = `${getQuizPageUrl()}?quiz=${quizId}&otp=${otp}`;
     trackEvent('otp_share', { 'quiz_id': quizId });
     console.log('📤 Sharing OTP URL:', url);
 
@@ -1903,6 +2004,95 @@ function fallbackShare(text) {
     // WhatsApp share
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
     window.open(whatsappUrl, '_blank');
+}
+
+function getCreateQuizPaperSelections() {
+    const numRounds = parseInt(document.getElementById('num-rounds').value) || 1;
+    const paperIds = [];
+
+    for (let i = 1; i <= numRounds; i++) {
+        const roundSelect = document.querySelector(`[data-round="${i}"]`);
+        if (!roundSelect) continue;
+
+        Array.from(roundSelect.selectedOptions).forEach(option => {
+            if (option.value && !paperIds.includes(option.value)) {
+                paperIds.push(option.value);
+            }
+        });
+    }
+
+    return paperIds;
+}
+
+function parseQuestionNumbers(value) {
+    return String(value || '')
+        .split('-')
+        .map(n => parseInt(n, 10))
+        .filter(n => Number.isInteger(n) && n > 0);
+}
+
+function buildQuestionNumbersParam(numQuestions) {
+    const count = Math.max(1, parseInt(numQuestions, 10) || 1);
+    const questionNumbers = [];
+
+    for (let i = 1; i <= count; i++) {
+        questionNumbers.push(i);
+    }
+
+    return questionNumbers.join('-');
+}
+
+function buildDirectQuizUrl() {
+    const paperIds = getCreateQuizPaperSelections();
+    if (paperIds.length === 0) {
+        alert('Please select at least one question paper.');
+        return null;
+    }
+
+    const params = new URLSearchParams();
+    params.set('questionPaperId', paperIds.join(','));
+    params.set('randomQuestions', document.getElementById('random-questions').checked ? 'true' : 'false');
+    params.set('questionFormat', (window.qfGetSelectedQuizFormat && window.qfGetSelectedQuizFormat()) || 'classic');
+    params.set('questionNumbers', buildQuestionNumbersParam(document.getElementById('num-questions').value));
+
+    const targetClassEl = document.getElementById('quiz-target-class');
+    if (targetClassEl && targetClassEl.value) {
+        params.set('targetClass', targetClassEl.value);
+    }
+
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', '');
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+}
+
+const copyQuizUrlBtn = document.getElementById('copy-quiz-url-btn');
+if (copyQuizUrlBtn) {
+    copyQuizUrlBtn.addEventListener('click', async () => {
+        const url = buildDirectQuizUrl();
+        if (!url) return;
+
+        try {
+            await copyTextToClipboard(url);
+            alert(`Quiz URL copied to clipboard!\n\n${url}`);
+        } catch (error) {
+            alert(`Could not copy automatically. Please copy this URL:\n\n${url}`);
+        }
+    });
 }
 
 // Update save quiz to include privacy and reference settings
