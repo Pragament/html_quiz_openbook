@@ -112,6 +112,13 @@ body {
     background: var(--bg-color);
 }
 
+.quiz-instant-feedback {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .option-marker {
     width: 28px;
     height: 28px;

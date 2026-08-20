@@ -34,16 +34,17 @@ function trackEvent(eventName, eventParams = {}) {
 }
 const urlParams = new URLSearchParams(window.location.search);
 const showAnswersNoSubmit = urlParams.get('showAnswersNoSubmit');
-const instantEvaluation = parseBooleanParam(urlParams.get('instantEvaluation'))
-    || parseBooleanParam(urlParams.get('instantQuestionEvaluation'))
-    || parseBooleanParam(urlParams.get('evaluateInstantly'))
-    || parseBooleanParam(urlParams.get('instant'))
-    || parseBooleanParam(urlParams.get('showEvaluation'));
 
 function parseBooleanParam(value) {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'true' || normalized === '1' || normalized === 'yes';
 }
+
+const urlInstantEvaluation = parseBooleanParam(urlParams.get('instantEvaluation'))
+    || parseBooleanParam(urlParams.get('instantQuestionEvaluation'))
+    || parseBooleanParam(urlParams.get('evaluateInstantly'))
+    || parseBooleanParam(urlParams.get('instant'))
+    || parseBooleanParam(urlParams.get('showEvaluation'));
 
 // State Management
 const state = {
@@ -58,7 +59,10 @@ const state = {
     timerInterval: null,
     pdfDocument: null,
     currentPdfPage: 1,
-    quizInProgress: false
+    quizInProgress: false,
+    instantEvaluation: false,
+    questionPaperLoaded: false,
+    pendingQuizConfig: null
 };
 
 // DOM Elements
@@ -164,6 +168,11 @@ function initEventListeners() {
                 studentModal.show();
             }
         });
+    }
+
+    const startQuizConfigBtn = document.getElementById('start-quiz-config-btn');
+    if (startQuizConfigBtn) {
+        startQuizConfigBtn.addEventListener('click', handleQuizConfigSubmit);
     }
 
     // Class buttons delegation for embed.html
@@ -386,7 +395,7 @@ function getQuestionFeedbackHtml(question, index) {
     const correct = getCorrectOptionIndex(question);
     let html = '';
 
-    if (instantEvaluation && selected !== undefined && correct !== null) {
+    if (state.instantEvaluation && selected !== undefined && correct !== null) {
         const isCorrect = selected === correct;
         html += `
             <div class="alert ${isCorrect ? 'alert-success' : 'alert-danger'} mt-3 mb-0 quiz-instant-feedback">
@@ -1142,11 +1151,14 @@ function startDirectQuiz(directQuizConfig) {
         }]
     };
 
+    state.instantEvaluation = directQuizConfig.instantEvaluation || false;
+
     trackEvent('direct_quiz_start', {
         'question_paper_ids': paperIds.join(','),
         'num_questions': directQuizConfig.questionNumbers.length || 'all',
         'is_random': directQuizConfig.randomQuestions,
-        'question_format': state.activeQuiz.questionFormat
+        'question_format': state.activeQuiz.questionFormat,
+        'instant_evaluation': state.instantEvaluation
     });
 
     state.currentRound = 1;
@@ -1338,7 +1350,7 @@ function navigateToQuestion(index) {
         if (showAnswersNoSubmit && opt.correct === true) {
             selected = true;
         }
-        const evaluationClass = instantEvaluation && selected
+        const evaluationClass = state.instantEvaluation && selected
             ? (i === correctOption ? 'is-correct' : 'is-wrong')
             : '';
         return `
@@ -1615,10 +1627,88 @@ function checkUrlParameters() {
     if (quizId) {
         loadQuizFromUrl(quizId, otp);
     } else if (directQuizConfig) {
-        startDirectQuiz(directQuizConfig);
+        // Store the config and show configuration modal
+        state.pendingQuizConfig = directQuizConfig;
+        showQuizConfigModal(directQuizConfig);
     } else if (document.getElementById('quiz-loading')) {
         setQuizLoading(true, 'Quiz link is missing question parameters.');
     }
+}
+
+async function showQuizConfigModal(config) {
+    setQuizLoading(true, 'Loading question paper...');
+    
+    try {
+        // Load question paper in background to get total questions
+        const paperId = config.paperIds[0];
+        let paperDoc = await db.collection('questionpapers').doc(paperId).get();
+        if (!paperDoc.exists) {
+            paperDoc = await db.collection('QuestionPapers').doc(paperId).get();
+        }
+        
+        if (paperDoc.exists) {
+            const paperData = paperDoc.data();
+            const questions = paperData.questions || paperData.Questions || ((paperData.Question || paperData.question) ? [paperData] : []);
+            state.questionPaperLoaded = true;
+            state.totalQuestionsInPaper = questions.length;
+            
+            setQuizLoading(false);
+            
+            // Populate modal with current config values
+            document.getElementById('config-random-questions').value = config.randomQuestions ? 'true' : 'false';
+            document.getElementById('config-question-format').value = config.questionFormat || 'classic';
+            document.getElementById('config-instant-feedback').value = config.instantEvaluation ? 'true' : 'false';
+
+            const questionSelectionContainer = document.getElementById('config-question-selection-container');
+            const questionNumbersSelect = document.getElementById('config-question-numbers');
+            if (config.hasQuestionNumbersParam) {
+                questionSelectionContainer.classList.remove('d-none');
+                questionNumbersSelect.value = 'url';
+                const urlOption = questionNumbersSelect.querySelector('option[value="url"]');
+                if (urlOption) {
+                    urlOption.textContent = 'Use questions from URL';
+                }
+            } else {
+                questionSelectionContainer.classList.add('d-none');
+                questionNumbersSelect.value = 'all';
+            }
+            
+            // Show modal
+            const modalEl = document.getElementById('quizConfigModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        } else {
+            setQuizLoading(false);
+            alert('Question paper not found');
+        }
+    } catch (error) {
+        setQuizLoading(false);
+        console.error('Error loading question paper:', error);
+        alert('Failed to load question paper: ' + error.message);
+    }
+}
+
+function handleQuizConfigSubmit() {
+    const randomQuestions = document.getElementById('config-random-questions').value === 'true';
+    const questionFormat = document.getElementById('config-question-format').value;
+    const instantEvaluation = document.getElementById('config-instant-feedback').value === 'true';
+    const questionSelection = document.getElementById('config-question-numbers').value;
+    const questionNumbers = questionSelection === 'url'
+        ? [...(state.pendingQuizConfig.urlQuestionNumbers || [])]
+        : [];
+    
+    // Update pending config with user selections
+    state.pendingQuizConfig.randomQuestions = randomQuestions;
+    state.pendingQuizConfig.questionFormat = questionFormat;
+    state.pendingQuizConfig.instantEvaluation = instantEvaluation;
+    state.pendingQuizConfig.questionNumbers = questionNumbers;
+    
+    // Hide modal and start quiz
+    const modalEl = document.getElementById('quizConfigModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    modal.hide();
+    
+    startDirectQuiz(state.pendingQuizConfig);
 }
 
 function getDirectQuizConfigFromUrl(urlParams) {
@@ -1632,7 +1722,8 @@ function getDirectQuizConfigFromUrl(urlParams) {
 
     if (paperIds.length === 0) return null;
 
-    const questionNumbers = parseQuestionNumbers(urlParams.get('questionNumbers'));
+    const rawQuestionNumbers = urlParams.get('questionNumbers');
+    const questionNumbers = parseQuestionNumbers(rawQuestionNumbers);
 
     const randomValue = String(urlParams.get('randomQuestions') || '').toLowerCase();
     const randomQuestions = randomValue === 'true' || randomValue === '1' || randomValue === 'yes';
@@ -1645,8 +1736,11 @@ function getDirectQuizConfigFromUrl(urlParams) {
         randomQuestions,
         questionFormat: urlParams.get('questionFormat') || urlParams.get('format') || 'classic',
         questionNumbers,
+        urlQuestionNumbers: [...questionNumbers],
+        hasQuestionNumbersParam: rawQuestionNumbers !== null,
         targetClass: urlParams.get('targetClass') || '',
-        openBook
+        openBook,
+        instantEvaluation: urlInstantEvaluation
     };
 }
 
